@@ -1,6 +1,6 @@
 # Office Game · Team Communication and Strategy
 
-[中文](README.md) | [English](README.en.md)
+[项目首页 / Overview](README.md) | [中文说明](README.zh-CN.md) | [English guide](README.en.md)
 
 An office-themed strategy game presented as a project collaboration workspace. Players join with different roles and backgrounds, then interact through requirements, resources and review rounds. Supports multiplayer sessions and solo practice. The application UI is currently Chinese.
 
