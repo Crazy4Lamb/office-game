@@ -6,6 +6,8 @@
 <title>团队沟通</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+/* 登录层、弹窗等必须遵守 hidden，避免 display:flex 覆盖浏览器默认隐藏样式。 */
+[hidden]{display:none!important}
 :root{
   --acc:#3370ff;--bg:#f5f6f7;--card:#fff;--line:#e5e6eb;--ink:#1d2129;--sub:#86909c;
   --ok:#00b42a;--warn:#ff7d00;--danger:#f53f3f;--soft:#f2f3f5;--side:#f7f8fa;
@@ -789,7 +791,13 @@ document.addEventListener('click',function(e){
   var el=e.target.closest('[data-opt]'); if(!el||el.disabled) return;
   var a=el.dataset.opt, v=el.dataset.value;
   var map={industry:'industry',goal:'goal',format:'format',inputmode:'inputMode',roleassign:'roleAssign',originmode:'originMode'};
-  if(map[a]) act('config',jsonKV(map[a],v));
+  if(a==='goal'){
+    var g=S.meta.goals.filter(function(x){ return x.key===v; })[0];
+    // 目标和赛制一起更新，避免先切目标被旧赛制拒绝，赛制选项又尚未解锁。
+    var format=g&&g.kind==='boss'?(S.config.format==='pvp'?'coop':S.config.format):'pvp';
+    act('config',{goal:v,format:format});
+  }
+  else if(map[a]) act('config',jsonKV(map[a],v));
   else if(a==='pickrole') act('pickrole',{role:v});
 });
 

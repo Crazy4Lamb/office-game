@@ -10,10 +10,10 @@ An office-themed strategy game presented as a project collaboration workspace. P
 
 ## 使用说明 / User Guides
 
-- [中文说明（独立文档）](README.zh-CN.md)
-- [English guide (separate document)](README.en.md)
+- [中文说明](README.zh-CN.md)
+- [English guide](README.en.md)
 
-下方提供完整的中文和英文说明。 / Complete Chinese and English instructions are included below.
+下方提供完整的中文和英文说明与实际界面截图。 / Full guides and actual screenshots follow.
 
 ---
 
@@ -85,6 +85,41 @@ node server.js
 
 检查脚本可能依赖浏览器工具、特定端口或测试重置设置，运行前请阅读脚本。当前网页界面为中文；文档提供中英文版本。项目没有持久化数据库，GitHub 保存代码而不是运行中的对局。
 
+## 图解玩法说明
+
+![单人项目攻坚中的群聊与操作区](docs/images/game.png)
+
+### 新手第一局：单人演练
+
+1. 输入昵称并进入协作空间，第一位玩家成为主持人。
+2. 将「本季度目标」设为「项目攻坚」，再将「赛制」设为「单人演练」。建议先使用「卡牌模式」与随机职位。
+3. 点击「立项，开始本季度」。查看右侧需求池、自己的状态与当前轮次。
+4. 在底部选择可用需求模板；需要目标的操作选择接收人，再点击「提交评审」。单人演练的需求目标按规则指向甲方。
+5. 阅读站会、评审和互评日志，按剩余带宽与需求池调整策略；单人目标是连续通过三个项目关。
+
+### 多人如何开始
+
+同事通过主持人电脑的局域网地址加入同一服务。选择多人目标或团队攻坚，等待所需成员加入后立项。团队攻坚需要合作清空需求池，任一成员出局会导致团队失败；多人混战则按所选目标结算。
+
+### 不同目标的胜负条件
+
+| 目标 | 玩法与目标 |
+|---|---|
+| 末位优化 | 多人混战，最后存活的玩家晋升 |
+| 绩效冲刺 | KPI 先到 100 晋升；带宽归零会出局 |
+| OKR 对齐 | 认领目标 O，完成度先到 100% 获胜；同一 O 的人数影响推进 |
+| 项目死线 | 10 轮交付窗口，到期按交付评级，并有阶段检查 |
+| 项目攻坚 | 团队清空需求池，或单人连续通过三个项目关 |
+
+### 读懂操作区
+
+- **卡牌 / 关键词 / 自由对话**决定如何提出需求；初次体验推荐卡牌。
+- **技能与职位**决定可用操作；看清效果与接收人后再提交。
+- **摸鱼值**可累积并解锁「准点下班」，恢复、转嫁和防御操作需要结合局势使用。
+- **群聊 / 看板 / 会议视图**是同一对局的不同展示，可在右上角切换；「手册」查看内置帮助，「导出周报」导出记录。
+
+截图是使用演示昵称的单人模式。服务重启会清空内存对局。
+
 ---
 
 # English Guide
@@ -154,3 +189,38 @@ Set the LLM key through server environment variables. LLM parsing sends relevant
 | test.js, dom-check.js, ghost-check.js, repro.js | Development checks and reproduction scripts |
 
 Check scripts may require browser tooling, specific ports or test-reset settings; read them before running. Documentation is bilingual while the application UI is Chinese. There is no persistent database: GitHub stores the code, not active game sessions.
+
+## Illustrated Gameplay Guide
+
+![Solo project challenge: chat, status and action area](docs/images/game.png)
+
+### Your first session: solo practice
+
+1. Enter a nickname and join. The first participant becomes the host.
+2. Select Project Challenge (项目攻坚), then Solo Practice (单人演练). Start with Card Mode (卡牌模式) and random roles.
+3. Click 立项，开始本季度. Read the demand pool, your status and round counter.
+4. Choose an available action card at the bottom. Select a recipient when required, then click 提交评审. Solo demand targets follow the client-targeting rules.
+5. Read stand-up, review and voting logs; balance remaining bandwidth against the demand pool. Solo play requires clearing three consecutive project stages.
+
+### Multiplayer setup
+
+Coworkers join the same server using the host computer's LAN address. Choose a multiplayer objective or cooperative challenge, wait for the required participants and start. Cooperative play clears the demand pool together; any eliminated teammate causes a team failure. Competitive play uses the selected objective's outcome rules.
+
+### Objectives
+
+| Objective | Winning condition |
+|---|---|
+| Last-person-standing / 末位优化 | The final surviving player is promoted |
+| KPI Sprint / 绩效冲刺 | Reach 100 KPI first; zero bandwidth eliminates a player |
+| OKR Alignment / OKR 对齐 | Reach 100% objective completion first; shared objectives affect progress |
+| Project Deadline / 项目死线 | A ten-round delivery window with periodic checks and final delivery ratings |
+| Project Challenge / 项目攻坚 | Clear the pool cooperatively, or pass three solo project stages |
+
+### Reading the controls
+
+- Card, Keyword and Free Conversation modes determine how actions are entered; cards are easiest to learn.
+- Roles determine available skills. Read effects and target requirements before submission.
+- Accumulate slack points (摸鱼值) to unlock 准点下班; recovery, redirection and defense depend on the current situation.
+- Chat, Board and Meeting views show the same session. Use the top-right selector; 手册 opens built-in help and 导出周报 exports the log.
+
+The screenshot uses a demo nickname in solo mode. Restarting the server clears its in-memory session.

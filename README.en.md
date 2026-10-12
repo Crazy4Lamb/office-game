@@ -69,3 +69,38 @@ Set the LLM key through server environment variables. LLM parsing sends relevant
 | test.js, dom-check.js, ghost-check.js, repro.js | Development checks and reproduction scripts |
 
 Check scripts may require browser tooling, specific ports or test-reset settings; read them before running. Documentation is bilingual while the application UI is Chinese. There is no persistent database: GitHub stores the code, not active game sessions.
+
+## Illustrated Gameplay Guide
+
+![Solo project challenge: chat, status and action area](docs/images/game.png)
+
+### Your first session: solo practice
+
+1. Enter a nickname and join. The first participant becomes the host.
+2. Select Project Challenge (项目攻坚), then Solo Practice (单人演练). Start with Card Mode (卡牌模式) and random roles.
+3. Click 立项，开始本季度. Read the demand pool, your status and round counter.
+4. Choose an available action card at the bottom. Select a recipient when required, then click 提交评审. Solo demand targets follow the client-targeting rules.
+5. Read stand-up, review and voting logs; balance remaining bandwidth against the demand pool. Solo play requires clearing three consecutive project stages.
+
+### Multiplayer setup
+
+Coworkers join the same server using the host computer's LAN address. Choose a multiplayer objective or cooperative challenge, wait for the required participants and start. Cooperative play clears the demand pool together; any eliminated teammate causes a team failure. Competitive play uses the selected objective's outcome rules.
+
+### Objectives
+
+| Objective | Winning condition |
+|---|---|
+| Last-person-standing / 末位优化 | The final surviving player is promoted |
+| KPI Sprint / 绩效冲刺 | Reach 100 KPI first; zero bandwidth eliminates a player |
+| OKR Alignment / OKR 对齐 | Reach 100% objective completion first; shared objectives affect progress |
+| Project Deadline / 项目死线 | A ten-round delivery window with periodic checks and final delivery ratings |
+| Project Challenge / 项目攻坚 | Clear the pool cooperatively, or pass three solo project stages |
+
+### Reading the controls
+
+- Card, Keyword and Free Conversation modes determine how actions are entered; cards are easiest to learn.
+- Roles determine available skills. Read effects and target requirements before submission.
+- Accumulate slack points (摸鱼值) to unlock 准点下班; recovery, redirection and defense depend on the current situation.
+- Chat, Board and Meeting views show the same session. Use the top-right selector; 手册 opens built-in help and 导出周报 exports the log.
+
+The screenshot uses a demo nickname in solo mode. Restarting the server clears its in-memory session.
