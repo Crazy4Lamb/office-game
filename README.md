@@ -154,6 +154,10 @@ node server.js
 
 ### 读懂操作区
 
+群聊里，人物动作显示发起方头像、花名、职位、接收方及原话；驳回、挡下、甩锅和出身反弹会以回应方头像出现，并引用原始需求。右侧分别显示成员列表与处理记录，数值变化、事件和结算文字集中在记录中，可切换本轮／全部。在窄窗口中右栏保持可见；手机上通过「成员 / 记录」打开侧栏。
+
+已处理的人物消息进入下一轮后仍保留，阅读旧消息时不会被新消息强制拉到底部。季度结束后也保留聊天过程，直到主持人开启新一轮。`node conversation-check.js` 在隔离服务中检查人物身份、回应关系和历史保留。
+
 - **卡牌 / 关键词 / 自由对话**决定如何提出需求；初次体验推荐卡牌。
 - **技能与职位**决定可用操作；看清效果与接收人后再提交。
 - **摸鱼值**可累积并解锁「准点下班」，恢复、转嫁和防御操作需要结合局势使用。
@@ -161,7 +165,18 @@ node server.js
 
 截图是使用演示昵称的单人模式。服务重启会清空内存对局。
 
+## 如何查看动作、回应与处理记录
+
+1. 在群聊中先看头像与花名，确认是谁发起了需求，再看接收方和原话。
+2. 遇到驳回、挡下、转嫁或出身反弹时，查看回应人物及引用的原始需求，区分发起者与处理者。
+3. 在右侧「处理记录」查看数值变化、事件与结算；用「本轮 / 全部」切换范围。手机上点击「成员 / 记录」打开侧栏。
+4. 向上阅读旧消息时不会自动跳回最新消息；跨轮和季度结束后仍可回看，主持人开启新一轮后再开始新的聊天过程。
+
+聊天与处理记录是两种视图：前者保留人物互动，后者解释机制变化。它们仍保存在服务进程内存中，不是持久化存档。
+
 ---
+
+# English Guide
 
 ## Features
 
@@ -278,9 +293,22 @@ Coworkers join the same server using the host computer's LAN address. Choose a m
 
 ### Reading the controls
 
+Chat actions show the sender's avatar, name, role, recipient and original wording. Blocks, reflections, redirects and passive responses use the responding member's avatar and reference the original request. The right panel contains the roster and technical processing records, with current-round/all-record filtering. On phones, **Members / Records** opens the side drawer.
+
+Actions remain visible after the round changes or the quarter ends. Reading earlier messages does not force the chat to scroll to the newest one. `node conversation-check.js` tests sender identity, response attribution and history on an isolated server.
+
 - Card, Keyword and Free Conversation modes determine how actions are entered; cards are easiest to learn.
 - Roles determine available skills. Read effects and target requirements before submission.
 - Accumulate slack points (摸鱼值) to unlock 准点下班; recovery, redirection and defense depend on the current situation.
 - Chat, Board and Meeting views show the same session. Use the top-right selector; 手册 opens built-in help and 导出周报 exports the log.
 
 The screenshot uses a demo nickname in solo mode. Restarting the server clears its in-memory session.
+
+## Following actions, responses and processing records
+
+1. Read the avatar and display name to identify who initiated a request, then check its recipient and original wording.
+2. For blocks, reflections, redirects or passive reactions, inspect the responding member and quoted request to distinguish initiator from responder.
+3. Use Processing Records on the right for numerical changes, events and settlement details. Switch between current round and all records; on mobile, open Members / Records.
+4. Reading older messages does not force a jump to the latest message. History survives round changes and quarter settlement until the host starts a new quarter.
+
+Chat preserves character interactions; processing records explain game mechanics. Both remain in server memory rather than a persistent archive.

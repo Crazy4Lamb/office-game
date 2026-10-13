@@ -78,6 +78,8 @@ const room = {
   turnTimer: null,
   botTimer: null,
   gameVersion: 0,
+  logSequence: 0,
+  bossMessage: null,
 };
 
 /* ---------------------------------------------------------------- 工具 */
@@ -113,9 +115,30 @@ function enemies(p) { return actives().filter(t => t !== p && (!allies(p, t) || 
 function roundsMax() { const g = goal(); return isSolo() ? (cfg().stages - cfg().startStage + 1) * (g.key === 'deadline' ? g.rounds : 10) : g.rounds; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-function pushLog(kind, text, name) {
-  room.log.push({ ts: Date.now(), kind, text, name: name || '' });
+function pushLog(kind, text, name, extra) {
+  const entry = Object.assign({ id: 'message-' + (++room.logSequence), ts: Date.now(), round: room.round, stage: room.stage, kind, text, name: name || '' }, extra || {});
+  room.log.push(entry);
   if (room.log.length > 400) room.log.splice(0, room.log.length - 400);
+  return entry;
+}
+function messagePerson(value) {
+  if (value === BOSS) return { id: BOSS, name: ind().boss, roleLabel: '项目方', roleIcon: '🏢', npc: true };
+  const p = typeof value === 'string' ? byId(value) : value;
+  if (!p) return null;
+  const role = roleOf(p) || {};
+  return { id: p.id, name: p.name, roleLabel: role.label || '', roleIcon: role.icon || '', team: p.team || '', bot: !!p.bot };
+}
+let activeMessage = null;
+function exchangeMessage(category, actor, target, label, quote, extra) {
+  const from = messagePerson(actor), to = messagePerson(target);
+  return pushLog('exchange', `${from ? from.name : ''} · ${label}`, from ? from.name : '', Object.assign({ category, actor: from, recipient: to, label, quote: quote || '' }, extra || {}));
+}
+function responseMessage(defender, source, label, outcome, redirected) {
+  return exchangeMessage('response', defender, source || BOSS, label, '', {
+    outcome, parentId: activeMessage ? activeMessage.id : '',
+    replyTo: activeMessage ? { actor: activeMessage.actor, label: activeMessage.label, quote: activeMessage.quote } : null,
+    redirected: redirected ? messagePerson(redirected) : null,
+  });
 }
 
 /* ---------------------------------------------------------------- 角色 / 出身 */
@@ -367,6 +390,7 @@ function viewFor(viewer) {
     } : null,
     revealed: room.revealed,
     log: room.log.slice(-140),
+    gameVersion: room.gameVersion,
     urls: lanUrls(),
     network: networkInfo(PORT, HOST),
     winner: room.winner ? { name: room.winner.name, team: !!room.winner.team, reason: room.winnerReason } : null,
@@ -571,6 +595,7 @@ function quoteBoss(round) {
 function startRound() {
   if (room.phase === 'over') return;
   room.round++;
+  room.bossMessage = null;
   room.stageRound++;
   room.revealed = []; room.eventExtra = null; room.votes = {}; room.globalShieldPct = 0;
   const g = goal();
@@ -615,6 +640,7 @@ function startRound() {
       const dmg = isSolo() ? (room.boss.atkBase + Math.ceil(room.boss.round / 3)) : (room.boss.atkBase + Math.floor(room.round / 2));
       room.boss.telegraph = { targetId: target.id, dmg };
       pushLog('sys', `【${ind().boss}】${quoteBoss(room.round)} → @${target.name}${isSolo() ? `（预判 -${dmg} 带宽）` : ''}`);
+      room.bossMessage = exchangeMessage('proposal', BOSS, target, '甲方需求', quoteBoss(room.round));
     } else room.boss.telegraph = null;
   }
 
@@ -674,15 +700,21 @@ function dealDamage(att, to, amount, label, kind) {
 
   // 防守姿态（互评与直接伤害不吃防御）
   if (kind === 'demand') {
-    if (to.ultShield) return { dealt: 0, text: `@${to.name} 已准点下班，本轮不再接收任何需求` };
+    if (to.ultShield) {
+      responseMessage(to, att, '准点下班', '未接收这条需求');
+      pushLog('sys', `@${to.name} 已准点下班，挡下「${label}」`);
+      return { dealt: 0, text: `@${to.name} 已准点下班，本轮不再接收任何需求` };
+    }
     if (room.globalShieldPct) amount = amount * (1 - room.globalShieldPct / 100);
     if (to.shield) {
       to.shield = false;
+      responseMessage(to, att, to.defenseLabel || '排期后置', '已挡下这条需求');
       if (att) pushLog('sys', `@${to.name} 把「${label}」排期后置，需求被推迟到下个迭代`);
       return { dealt: 0, text: '需求被排期后置，本轮失效' };
     }
     if (to.reflect) {
       to.reflect = false;
+      responseMessage(to, att, to.defenseLabel || '驳回', '已驳回，需求原路返回');
       if (att && att.alive !== undefined) { att.bw -= amount; pushLog('sys', `@${to.name} 驳回「${label}」，需求原路返回：@${att.name} 带宽 -${Math.round(amount)}`); }
       else if (room.boss) { room.boss.hp = Math.max(0, room.boss.hp - amount); pushLog('sys', `@${to.name} 驳回甲方的「${label}」，需求被打回：剩余需求 -${Math.round(amount)}`); }
       return { dealt: 0, text: `需求被驳回并原路返回（-${Math.round(amount)}）` };
@@ -691,6 +723,7 @@ function dealDamage(att, to, amount, label, kind) {
       const f = byId(to.redirectTo);
       if (f && f.alive && f !== to) {
         f.bw -= amount;
+        responseMessage(to, att, '甩锅', '已转交需求', f);
         pushLog('sys', `@${to.name} 熟练甩锅，「${label}」转嫁给 @${f.name}：带宽 -${Math.round(amount)}`);
         return { dealt: amount, text: `被甩锅转给 @${f.name}（-${Math.round(amount)}）` };
       }
@@ -713,6 +746,7 @@ function dealDamage(att, to, amount, label, kind) {
   // 出身反伤 / 工具人摸鱼值
   if (att && att.alive !== undefined && m.reflect) {
     att.bw -= m.reflect;
+    responseMessage(to, att, '出身 · 被动反弹', '已将部分需求反弹给对方');
     pushLog('sys', `@${to.name} 出身「${(ORIGIN_BY_KEY[to.origin] || {}).label || ''}」，反弹 ${m.reflect} 点给 @${att.name}`);
   }
   if (m.chargeOnHit) to.slack = Math.min(MAX_SLACK, to.slack + m.chargeOnHit);
@@ -984,6 +1018,7 @@ function resolveRound() {
     if (t && t.alive) t.buffPct += e.skill.pct;
   });
   entries.filter(e => e.skill.kind === 'globalShield').forEach(e => { room.globalShieldPct = Math.max(room.globalShieldPct, e.skill.pct); });
+  entries.forEach(e => { e.p.defenseLabel = ['shield', 'reflect', 'fortify', 'redirect'].includes(e.skill.kind) ? e.skill.label : ''; });
   entries.filter(e => e.skill.kind === 'shield').forEach(e => { e.p.shield = true; });
   entries.filter(e => e.skill.kind === 'reflect').forEach(e => { e.p.reflect = true; });
   entries.filter(e => e.skill.kind === 'fortify').forEach(e => { e.p.shield = true; e.p.reflect = true; });
@@ -995,28 +1030,39 @@ function resolveRound() {
 
   room.revealed = entries.map(e => ({
     from: e.p.name, fromId: e.p.id, label: e.skill.label, tag: e.skill.tag,
+    actor: messagePerson(e.p), recipient: messagePerson(e.target), round: room.round,
     quote: String(e.skill.quote).replace('@T', labelOf(e.target)),
     target: labelOf(e.target), raw: e.raw || '', source: e.source || 'card', result: '',
   }));
+  const actionMessages = entries.map((e, i) => {
+    const target = e.target === 'all' ? null : e.target || (!e.skill.needTarget && !['aoe', 'healAll', 'revealAll', 'globalShield'].includes(e.skill.kind) ? e.p : null);
+    return exchangeMessage('action', e.p, target, e.skill.label, room.revealed[i].quote, { tag: e.skill.tag, raw: e.raw || '' });
+  });
 
   entries.forEach((e, i) => {
-    if (room.phase === 'over') { room.revealed[i].result = '本季度已结束'; return; }
-    if (!e.p.alive) { room.revealed[i].result = '提案人已离场，需求作废'; return; }
-    if (e.p.disabled) { room.revealed[i].result = '需求被上级冻结，本轮作废'; return; }
+    const message = actionMessages[i];
+    activeMessage = message;
+    if (room.phase === 'over') { room.revealed[i].result = '本季度已结束'; message.outcome = '本季度已结束'; return; }
+    if (!e.p.alive) { room.revealed[i].result = '提案人已离场，需求作废'; message.outcome = '成员已离场'; return; }
+    if (e.p.disabled) { room.revealed[i].result = '需求被上级冻结，本轮作废'; message.outcome = '需求被上级冻结'; return; }
     const before = room.revealed[i];
     // 赋能：提升本次伤害
     if (e.p.buffPct > 0 && (e.skill.kind === 'attack' || e.skill.kind === 'aoe' || e.skill.kind === 'dot')) {
       e.skill = Object.assign({}, e.skill, { dmg: Math.round((e.skill.dmg || 0) * (1 + e.p.buffPct / 100)) });
     }
     room.revealed[i].result = applySkill(e);
+    message.outcome = '已处理';
+    pushLog('sys', `@${e.p.name}「${e.skill.label}」处理结果：${room.revealed[i].result}`);
     checkDeaths();
   });
+  activeMessage = null;
 
   // 清空临时控制标记
   room.players.forEach(p => { p.disabled = false; p.buffPct = 0; });
 
   // 甲方落点
   if (room.boss && room.boss.telegraph && room.phase !== 'over') {
+    activeMessage = room.bossMessage;
     const t = byId(room.boss.telegraph.targetId);
     if (t && t.alive) {
       const dmg = room.boss.telegraph.dmg;
@@ -1027,6 +1073,7 @@ function resolveRound() {
     room.boss.telegraph = null;
     checkDeaths();
   }
+  activeMessage = null;
   room.players.forEach(p => { p.ultShield = false; });
 
   // 甲方持续伤害 & 项目推进 dot
@@ -1329,7 +1376,7 @@ async function apiAct(p, body) {
     case 'chat': {
       const text = String(body.text || '').trim().slice(0, 200);
       if (!text || !p) return { error: '消息为空' };
-      pushLog('chat', text, p.name);
+      pushLog('chat', text, p.name, { actor: messagePerson(p) });
       broadcast();
       return { ok: true };
     }
@@ -1453,7 +1500,7 @@ async function apiAct(p, body) {
       if (room.phase !== 'select' || room.round !== requestRound || room.gameVersion !== requestVersion) return { error: '本轮已结算' };
       if (p.submitted) return { error: '本轮已提交需求' };
       if (!r.ok) {
-        pushLog('chat', text, p.name);
+        pushLog('chat', text, p.name, { actor: messagePerson(p) });
         return {
           error: r.note || '没听明白你的意思',
           parsed: { text, confidence: r.confidence || 0, candidates: r.candidates || [], target: r.targetLabel || '' },
@@ -1461,7 +1508,7 @@ async function apiAct(p, body) {
       }
       const err = submit(p, r.skillKey, r.targetId, body.source || 'keyword', text);
       if (err) return { error: err };
-      pushLog('chat', text, p.name);
+      pushLog('chat', text, p.name, { actor: messagePerson(p) });
       broadcast();
       tryResolve();
       return {

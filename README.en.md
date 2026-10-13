@@ -119,9 +119,22 @@ Coworkers join the same server using the host computer's LAN address. Choose a m
 
 ### Reading the controls
 
+Chat actions show the sender's avatar, name, role, recipient and original wording. Blocks, reflections, redirects and passive responses use the responding member's avatar and reference the original request. The right panel contains the roster and technical processing records, with current-round/all-record filtering. On phones, **Members / Records** opens the side drawer.
+
+Actions remain visible after the round changes or the quarter ends. Reading earlier messages does not force the chat to scroll to the newest one. `node conversation-check.js` tests sender identity, response attribution and history on an isolated server.
+
 - Card, Keyword and Free Conversation modes determine how actions are entered; cards are easiest to learn.
 - Roles determine available skills. Read effects and target requirements before submission.
 - Accumulate slack points (摸鱼值) to unlock 准点下班; recovery, redirection and defense depend on the current situation.
 - Chat, Board and Meeting views show the same session. Use the top-right selector; 手册 opens built-in help and 导出周报 exports the log.
 
 The screenshot uses a demo nickname in solo mode. Restarting the server clears its in-memory session.
+
+## Following actions, responses and processing records
+
+1. Read the avatar and display name to identify who initiated a request, then check its recipient and original wording.
+2. For blocks, reflections, redirects or passive reactions, inspect the responding member and quoted request to distinguish initiator from responder.
+3. Use Processing Records on the right for numerical changes, events and settlement details. Switch between current round and all records; on mobile, open Members / Records.
+4. Reading older messages does not force a jump to the latest message. History survives round changes and quarter settlement until the host starts a new quarter.
+
+Chat preserves character interactions; processing records explain game mechanics. Both remain in server memory rather than a persistent archive.

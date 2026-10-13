@@ -69,6 +69,23 @@ main{flex:1;overflow:hidden;min-height:0}
 .msgRow.own .msgMeta{justify-content:flex-end}
 .bubble{background:var(--soft);border-radius:9px;padding:8px 12px;font-size:13px;line-height:1.6;word-break:break-word;white-space:pre-wrap}
 .msgRow.own .bubble{background:var(--accent-soft)}
+.exchangeBody{max-width:100%;min-width:0;flex:1}.exchangeRow{align-items:flex-start;margin:12px 0}.exchangeRow.own .exchangeBody{max-width:calc(100% - 42px)}
+.exchangeCard{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:11px 12px;max-width:420px;line-height:1.65}
+.exchangeRow.own .exchangeCard{background:var(--accent-soft);margin-left:auto}.exchangeCard.response{border-left:3px solid var(--ok)}
+.exchangeCard.proposal{border-left:3px solid var(--warn)}.exchangeRow.own .exchangeCard.response{border-left:0;border-right:3px solid var(--ok)}
+.exchangeMeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;margin-bottom:5px;color:var(--sub)}.exchangeMeta b{color:var(--ink);font-size:13px}
+.exchangeRow.own .exchangeMeta{justify-content:flex-end}.exchangeType{font-size:10px;padding:1px 6px;border-radius:10px;background:var(--soft);color:var(--sub)}
+.exchangeTitle{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:14px;font-weight:600}.recipientChip{font-size:12px;display:inline-flex;gap:5px;align-items:center;font-weight:400;color:var(--acc)}
+.exchangeQuote{font-size:13px;color:var(--ink);margin-top:5px;white-space:pre-wrap;word-break:break-word}.replyPreview{font-size:11px;line-height:1.7;background:var(--soft);border-radius:6px;padding:6px 9px;color:var(--sub);margin:0 0 7px;border-left:2px solid var(--line)}
+.exchangeOutcome{font-size:11px;color:var(--ok);margin-top:7px}.roundDivider{font-size:11px;text-align:center;color:var(--sub);margin:14px 0 9px}.presenceRow{display:flex;gap:8px;flex-wrap:wrap;padding:8px 0}.presenceItem{display:flex;gap:6px;align-items:center;font-size:11px;padding:5px 7px;border-radius:8px;background:var(--soft)}
+.presenceItem.ready{color:var(--ok)}.presenceItem .avatar{width:20px;height:20px;font-size:10px}.conversationEnd{padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--tint);margin:12px 0}
+.imRight{width:278px;flex:0 0 278px;display:flex!important;flex-direction:column;overflow:hidden;gap:10px}.sideMembers{min-height:80px;max-height:42%;flex:0 1 auto;display:flex;flex-direction:column}.sideRecords{flex:1;min-height:100px;display:flex;flex-direction:column}.sideScroll{overflow-y:auto;min-height:0;flex:1}
+.sideHeading{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:7px}.sideHeading button{font-size:10px;padding:2px 6px}.compactMember{display:flex;gap:7px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line)}.compactMember .info{min-width:0;flex:1;font-size:12px}.compactMember small{display:block;font-size:10px;color:var(--sub);margin-top:2px}.compactMember .state{font-size:10px;color:var(--sub);white-space:nowrap}
+.recordItem{font-size:11px;line-height:1.75;padding:7px 8px;border-bottom:1px solid var(--line);word-break:break-word}.recordItem .stamp{font-size:10px;color:var(--sub);margin-bottom:2px}.recordItem.mine{border-left:2px solid var(--acc)}.sideGoals{font-size:12px;flex:0 0 auto}.sideGoals summary{cursor:pointer;color:var(--sub)}.sideGoals>div{max-height:160px;overflow-y:auto;margin-top:8px}
+.rightToggle{display:none}.sideBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:25}.closeSidebar{display:none}
+#bossView{z-index:40;background:var(--card)}
+@media(max-width:1100px){.imSide{display:none!important}.imRight{width:230px;flex-basis:230px}.exchangeCard{padding:9px 10px}.exchangeMeta{font-size:11px}}
+@media(max-width:640px){.rightToggle,.closeSidebar{display:inline-block}.imRight{display:none!important}.imRight.open{display:flex!important;position:fixed;right:0;top:0;bottom:0;z-index:26;width:min(320px,calc(100vw - 28px));box-shadow:-8px 0 30px rgba(0,0,0,.25)}.exchangeTitle{font-size:13px}.exchangeQuote{font-size:12px}.exchangeRow>.avatar{width:28px;height:28px}.exchangeMeta b{font-size:12px}}
 .msgCard{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 12px;max-width:78%}
 .msgCard.pend{border-style:dashed;background:var(--tint);color:var(--sub)}
 .dcHead{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:5px}
@@ -259,6 +276,7 @@ header{height:auto;min-height:52px;flex-wrap:wrap;padding:10px 16px}.chips{flex:
       <button data-act="rules">手册</button>
       <button data-act="boss">导出周报</button>
       <button data-act="copyinvite">邀请同事</button>
+      <button class="rightToggle" data-act="sidebar">成员 / 记录</button>
       <button data-act="backtolobby" id="backToLobbyBtn" hidden>返回筹备</button>
       <button data-act="leave">退出房间</button>
       <span class="hint">Ctrl+B 老板键</span>
@@ -310,6 +328,7 @@ header{height:auto;min-height:52px;flex-wrap:wrap;padding:10px 16px}.chips{flex:
   </div>
 </div>
 <div id="toast"></div>
+<div class="sideBackdrop" id="sideBackdrop" data-act="closesidebar" hidden></div>
 
 <script>
 var S=null, me=null, es=null, picked={skill:null,target:null}, bossOpen=false, busy=false;
@@ -320,6 +339,8 @@ if(['chat','dingtalk','board','meeting'].indexOf(skin)<0) skin='chat';
 var theme=readStorage('localStorage','og_theme')||'system';
 var themeMedia=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
 var serverNetwork=null, connectionCheck=null, parseVersion=0;
+var recordsMode='round', sideOpen=false, combatCache={roomId:null,version:null,lastRound:0,messages:[]};
+try{var storedCombat=JSON.parse(readStorage('sessionStorage','og_combat')||'null');if(storedCombat&&Array.isArray(storedCombat.messages)) combatCache=storedCombat;}catch(e){}
 function applyTheme(value){
   theme=['system','light','dark','eye'].indexOf(value)>=0?value:'system';
   document.body.dataset.theme=theme==='system'?(themeMedia&&themeMedia.matches?'dark':'light'):theme;
@@ -470,7 +491,7 @@ function membersHTML(){
     if(p.spect) badges+='<span class="bdg out">观察期</span>';
     if(!p.alive&&!p.spect) badges+='<span class="bdg out">已优化</span>';
     if(p.dots) badges+='<span class="bdg origin">在身 ×'+p.dots+'</span>';
-    h+='<div class="mRow"><div class="mTop"><span class="avatar" style="background:'+avatarColor(p.name)+'">'+esc(p.name.slice(0,1))+'</span>'
+    h+='<div class="mRow"><div class="mTop"><span class="avatar" style="background:'+avatarColor(p.id||p.name)+'">'+esc(p.name.slice(0,1))+'</span>'
       +'<span class="nm">'+esc(p.name)+'</span>'
       +(S.phase==='select'&&p.alive&&!p.spect?'<span class="dot'+(p.submitted?' on':'')+'" title="'+(p.submitted?'已提交':'编辑中')+'"></span>':'')+'</div>'
       +'<div class="mTags">'+teamBadge(p)+roleBadge(p)+originBadge(p)+scoreBadge(p)+badges+(p.bot?'<span class="bdg">虚拟同事</span>':'')+'</div>'
@@ -528,7 +549,7 @@ function goalPanelHTML(){
 function timeOf(ts){ var d=new Date(ts); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function revealCardHTML(r,inStream){
   return '<div class="msgCard'+(inStream?'':'')+'">'
-    +'<div class="dcHead"><span class="avatar" style="background:'+avatarColor(r.from)+';width:20px;height:20px;font-size:11px">'+esc(r.from.slice(0,1))+'</span>'
+    +'<div class="dcHead"><span class="avatar" style="background:'+avatarColor(r.fromId||r.from)+';width:20px;height:20px;font-size:11px">'+esc(r.from.slice(0,1))+'</span>'
     +'<b>'+esc(r.from)+'</b><span class="tag '+tagCls(r.tag)+'">'+esc(r.tag)+'</span><span>'+esc(r.label)+'</span>'
     +'<span style="color:var(--sub)">→</span><span style="color:var(--acc)">'+esc(r.target)+'</span></div>'
     +'<div class="dcQuote">「'+esc(r.quote)+'」</div>'
@@ -536,25 +557,127 @@ function revealCardHTML(r,inStream){
     +'<div class="dcRes">'+esc(r.result||'结算中…')+'</div></div>';
 }
 function pendingHTML(p){
-  return '<div class="msgRow"><span class="avatar" style="background:'+avatarColor(p.name)+'">'+esc(p.name.slice(0,1))+'</span>'
+  return '<div class="msgRow"><span class="avatar" style="background:'+avatarColor(p.id||p.name)+'">'+esc(p.name.slice(0,1))+'</span>'
     +'<div><div class="msgMeta">'+esc(p.name)+'</div>'
     +'<div class="msgCard pend">'+(p.submitted?'需求卡已加密，评审会现场揭开':'正在整理需求…')+'</div></div></div>';
 }
-function streamHTML(){
-  var out='';
-  S.log.forEach(function(l){
-    if(l.kind==='chat'){
-      var own=(S.me&&l.name===S.me.name);
-      out+='<div class="msgRow '+(own?'own':'')+'"><span class="avatar" style="background:'+avatarColor(l.name)+'">'+esc(l.name.slice(0,1))+'</span>'
-        +'<div class="msgBody"><div class="msgMeta">'+esc(l.name)+' · '+timeOf(l.ts)+'</div><div class="bubble">'+esc(l.text)+'</div></div></div>';
-    } else {
-      out+='<div class="msgSys">'+esc(l.text)+'</div>';
-    }
+function personFor(id,name){
+  if(id==='boss'||(!id&&name===S.industry.boss)) return {id:'boss',name:S.industry.boss,roleLabel:'项目方',npc:true};
+  var p=S.players.filter(function(p){return id?p.id===id:p.name===name;})[0];
+  return p?{id:p.id,name:p.name,roleLabel:p.roleLabel,roleIcon:p.roleIcon,team:p.team,bot:p.bot}:{id:id||('name-'+name),name:name||'同事',roleLabel:''};
+}
+function portrait(p,mini){
+  p=p||{name:'全组',id:'group'};
+  return '<span class="avatar" style="background:'+(p.npc?'#bf741e':avatarColor(p.id||p.name))+(mini?';width:19px;height:19px;font-size:10px':'')+'" title="'+esc(p.name)+'">'+esc((p.name||'?').slice(0,1))+'</span>';
+}
+function messageHash(text){var hash=0;for(var i=0;i<text.length;i++)hash=(Math.imul(hash,31)+text.charCodeAt(i))|0;return Math.abs(hash);}
+function groupedLogs(){
+  var first=S.log.filter(function(l){return /【站会】第 (\d+)/.test(l.text||'');})[0];
+  var round=first?Math.max(0,Number(first.text.match(/【站会】第 (\d+)/)[1])-1):S.round;
+  return S.log.map(function(l,index){
+    var marker=(l.text||'').match(/【站会】第 (\d+)/);
+    if(l.round!=null)round=l.round;else if(marker)round=Number(marker[1]);
+    return Object.assign({},l,{round:round,order:index,id:l.id||('legacy-'+l.ts+'-'+messageHash((l.text||'')+(l.name||'')))});
   });
-  if(S.phase==='vote') out+=votePanelHTML();
-  if(S.revealed.length){ S.revealed.forEach(function(r){ out+='<div class="msgRow">'+revealCardHTML(r,true)+'</div>'; }); }
-  else if(S.phase==='select'){ S.players.filter(function(p){return !p.spect&&p.alive;}).forEach(function(p){ out+=pendingHTML(p); }); }
+}
+function actorsIn(text){return S.players.filter(function(p){return text.indexOf('@'+p.name)>=0;}).sort(function(a,b){return b.name.length-a.name.length;});}
+function legacyExchange(l,previous){
+  var text=l.text||'', boss=personFor('boss'), actor=null, target=null;
+  if(text.indexOf('【'+S.industry.boss+'】')===0&&text.indexOf('→ @')>=0){
+    target=actorsIn(text)[0];
+    return Object.assign({},l,{category:'proposal',actor:boss,recipient:target?personFor(target.id):null,label:'甲方需求',quote:text.slice(text.indexOf('】')+1).split(' → ')[0]});
+  }
+  var sender=S.players.slice().sort(function(a,b){return b.name.length-a.name.length;}).filter(function(p){return text.indexOf('@'+p.name+' ')===0;})[0];
+  if(sender)actor=personFor(sender.id);
+  var incoming=previous.slice().reverse().filter(function(m){return m.round===l.round&&m.actor&&m.recipient&&m.recipient.id===(actor||{}).id&&m.category!=='response';})[0];
+  if(actor&&/原路返回|反弹|排期后置|熟练甩锅/.test(text)){
+    var label=/熟练甩锅/.test(text)?'甩锅':/出身/.test(text)?'被动反弹':/排期后置/.test(text)?'排期后置':'驳回';
+    var redirected=/转嫁给 @/.test(text)?actorsIn(text).filter(function(p){return p.id!==actor.id;})[0]:null;
+    var directSource=actorsIn(text).filter(function(p){return p.id!==actor.id&&(!redirected||p.id!==redirected.id);})[0];
+    target=/甲方/.test(text)?boss:incoming?incoming.actor:directSource?personFor(directSource.id):null;
+    return Object.assign({},l,{category:'response',actor:actor,recipient:target,label:label,replyTo:incoming?{actor:incoming.actor,label:incoming.label,quote:incoming.quote}:null,outcome:label==='甩锅'?'已转交需求':label==='排期后置'?'已挡下需求':label==='被动反弹'?'已反弹给对方':'已驳回，需求原路返回',redirected:redirected?personFor(redirected.id):null});
+  }
+  if(/^甲方需求落到 @/.test(text)&&/被挡了下来/.test(text)){
+    var defender=actorsIn(text)[0];if(!defender)return null;
+    var already=previous.some(function(m){return m.round===l.round&&m.category==='response'&&m.actor&&m.actor.id===defender.id&&m.recipient&&m.recipient.id==='boss';});
+    if(already)return null;
+    var proposal=previous.slice().reverse().filter(function(m){return m.round===l.round&&m.actor&&m.actor.id==='boss';})[0];
+    return Object.assign({},l,{category:'response',actor:personFor(defender.id),recipient:boss,label:'防守回应',outcome:'已挡下甲方的需求',replyTo:proposal?{actor:boss,label:proposal.label,quote:proposal.quote}:null});
+  }
+  if(!actor)return null;
+  var skillMatch=text.match(/(?:使用|用)「([^」]+)」/), label=skillMatch?skillMatch[1]:/摸了一会儿鱼/.test(text)?'摸鱼':/向上同步/.test(text)?'向上管理':/准点下班/.test(text)?'准点下班':null;
+  if(!label)return null;
+  var skill=S.meta.allSkills.filter(function(s){return s.label===label;})[0];
+  var others=actorsIn(text).filter(function(p){return p.id!==actor.id;});
+  target=/推进项目|项目推进|甲方剩余/.test(text)?boss:others.length?personFor(others[0].id):skill&&!skill.needTarget?actor:null;
+  return Object.assign({},l,{category:'action',actor:actor,recipient:target,label:label,quote:skill?skill.quote.replace('@T',target?'@'+target.name:'对方'):'',tag:skill?skill.tag:''});
+}
+function rememberExchanges(logs){
+  var version=S.gameVersion==null?'legacy':S.gameVersion;
+  if(combatCache.roomId!==S.roomId||combatCache.version!==version||S.round<combatCache.lastRound||S.phase==='lobby') combatCache={roomId:S.roomId,version:version,lastRound:S.round,messages:[]};
+  var structured={};logs.forEach(function(l){if(l.kind==='exchange')structured[l.round]=true;});
+  var latest=[];
+  logs.forEach(function(l){
+    if(l.kind==='exchange')latest.push(l);
+    else if(l.kind==='sys'&&!structured[l.round]){var message=legacyExchange(l,latest);if(message)latest.push(message);}
+  });
+  if(S.phase!=='lobby') (S.revealed||[]).forEach(function(r,index){
+    var round=r.round||S.round;
+    if(structured[round])return;
+    var actor=r.actor||personFor(r.fromId,r.from);
+    var existing=latest.filter(function(m){return m.round===round&&m.category==='action'&&m.actor.id===actor.id&&m.label===r.label;})[0];
+    if(existing){existing.quote=r.quote;existing.raw=r.raw;return;}
+    var markers=logs.filter(function(l){return l.round===round;});
+    var first=markers.filter(function(l){return /【站会】/.test(l.text||'');})[0]||markers[0];
+    var recipient=r.recipient||(r.target===S.industry.boss?personFor('boss'):r.target&&r.target.charAt(0)==='@'?personFor(null,r.target.slice(1)):null);
+    latest.push({id:'revealed-'+round+'-'+actor.id,round:round,ts:(first?first.ts:Date.now())+1+index,order:(first?first.order:0)+1.5+index/100,kind:'exchange',category:'action',actor:actor,recipient:recipient,label:r.label,quote:r.quote,raw:r.raw,tag:r.tag});
+  });
+  var memory={};combatCache.messages.forEach(function(m){memory[m.id]=m;});latest.forEach(function(m){memory[m.id]=m;});
+  // 同一份已揭开的需求与旧日志匹配后只保留一条人物消息。
+  var actions={};Object.keys(memory).sort(function(a,b){return memory[a].ts-memory[b].ts;}).forEach(function(key){var m=memory[key];if(m.category!=='action')return;var signature=m.round+':'+m.actor.id+':'+m.label;var old=actions[signature];if(old){if(key.indexOf('revealed-')===0){if(m.raw)memory[old].raw=m.raw;delete memory[key];}else{delete memory[old];actions[signature]=key;}}else actions[signature]=key;});
+  combatCache.messages=Object.keys(memory).map(function(key){return memory[key];}).sort(function(a,b){return a.round-b.round||a.ts-b.ts||a.order-b.order;}).slice(-160);
+  combatCache.messages.forEach(function(reply){
+    if(reply.category!=='response'||reply.replyTo)return;
+    var quoted=(reply.text||'').match(/「([^」]+)」/), label=quoted?quoted[1]:null;
+    var source=combatCache.messages.filter(function(message){return message.round===reply.round&&message.category!=='response'&&message.actor&&message.recipient&&message.recipient.id===reply.actor.id&&(!reply.recipient||message.actor.id===reply.recipient.id)&&(!label||message.label===label);})[0];
+    if(source){reply.recipient=source.actor;reply.replyTo={actor:source.actor,label:source.label,quote:source.quote};}
+  });
+  combatCache.lastRound=S.round;writeStorage('sessionStorage','og_combat',JSON.stringify(combatCache));
+  return combatCache.messages;
+}
+function exchangeHTML(m){
+  var actor=m.actor||personFor(null,m.name), target=m.recipient, own=S.me&&actor.id===S.me.id;
+  var type=m.category==='response'?'回应':m.category==='proposal'?'发起需求':'提交需求';
+  var reply=m.replyTo;
+  return '<div class="msgRow exchangeRow'+(own?' own':'')+'" data-message-id="'+esc(m.id)+'">'+portrait(actor)+'<div class="exchangeBody"><div class="exchangeMeta"><b>'+esc(actor.name)+'</b><span>'+esc((actor.roleIcon||'')+' '+(actor.roleLabel||''))+'</span><span class="exchangeType">'+type+'</span><span>'+timeOf(m.ts)+'</span></div><div class="exchangeCard '+esc(m.category)+'">'
+    +(reply?'<div class="replyPreview">回应 '+esc(reply.actor?reply.actor.name:'对方')+' 的「'+esc(reply.label)+'」'+(reply.quote?'<br>'+esc(reply.quote):'')+'</div>':'')
+    +'<div class="exchangeTitle">'+esc(m.label)+(target?'<span class="recipientChip">→ '+portrait(target,true)+esc(target.id===actor.id?'自己':target.name)+'</span>':'')+'</div>'
+    +(m.quote?'<div class="exchangeQuote">「'+esc(m.quote)+'」</div>':'')
+    +(m.redirected?'<div class="exchangeQuote">转交给 '+esc(m.redirected.name)+'</div>':'')
+    +(m.category==='response'?'<div class="exchangeOutcome">'+esc(m.outcome||'已回应')+'</div>':'')
+    +(m.raw?'<details class="dcRaw"><summary>原始输入</summary>'+esc(m.raw)+'</details>':'')+'</div></div></div>';
+}
+function streamHTML(){
+  var logs=groupedLogs(), exchanges=rememberExchanges(logs), messages=exchanges.concat(logs.filter(function(l){return l.kind==='chat';}));
+  messages.sort(function(a,b){return a.round-b.round||a.ts-b.ts||a.order-b.order;});
+  var out='', round=-1;
+  messages.forEach(function(l){
+    if(l.round>0&&l.round!==round){round=l.round;out+='<div class="roundDivider">第 '+round+' 轮 · 群内协作</div>';}
+    if(l.kind==='chat'){
+      var actor=l.actor||personFor(null,l.name), own=S.me&&actor.id===S.me.id;
+      out+='<div class="msgRow'+(own?' own':'')+'" data-message-id="'+esc(l.id)+'">'+portrait(actor)+'<div class="msgBody"><div class="msgMeta">'+esc(actor.name)+' · '+timeOf(l.ts)+'</div><div class="bubble">'+esc(l.text)+'</div></div></div>';
+    }else out+=exchangeHTML(l);
+  });
+  if(S.phase==='vote')out+=votePanelHTML();
+  if(S.phase==='select')out+='<div class="roundDivider">第 '+S.round+' 轮 · 提交进度 '+S.ready.submitted+'/'+S.ready.alive+'</div><div class="presenceRow">'+S.players.filter(function(p){return p.alive&&!p.spect;}).map(function(p){return '<div class="presenceItem'+(p.submitted?' ready':'')+'">'+portrait(personFor(p.id),true)+'<span>'+esc(p.name)+'<br>'+(p.submitted?'已提交 · 待评审':'正在整理需求')+'</span></div>';}).join('')+'</div>';
+  if(S.phase==='over')out+='<div class="conversationEnd"><b>本季度已结束</b><br>'+winnerText()+'</div>';
+  if(!messages.length)out='<div class="msgSys">等待成员提交需求。人物消息在群内显示，具体处理结果见右侧记录。</div>'+out;
   return out;
+}
+function conversationSidebarHTML(){
+  var members=S.players.slice(), logs=groupedLogs().filter(function(l){return l.kind==='sys'&&(recordsMode==='all'||l.round===S.round);});
+  var list=(S.boss?'<div class="compactMember">'+portrait(personFor('boss'))+'<div class="info">'+esc(S.industry.boss)+'<small>项目方 · 剩余需求 '+S.boss.hp+'/'+S.boss.maxHp+'</small></div></div>':'')+members.map(function(p){return '<div class="compactMember">'+portrait(personFor(p.id))+'<div class="info">'+esc(p.name)+(p.isYou?' <span class="bdg you">我</span>':'')+'<small>'+esc((p.roleIcon||'')+' '+(p.roleLabel||'')+(p.team?' · '+(p.team==='red'?'一组':'二组'):''))+'</small></div><span class="state">'+esc(p.spect?'观战':!p.alive?'已优化':S.phase==='select'?(p.submitted?'已提交':'待提交'):p.tierText)+'</span></div>';}).join('');
+  return '<button class="closeSidebar" data-act="closesidebar">关闭成员 / 记录</button><section class="sideMembers"><div class="sideHeading">成员列表 · '+members.length+'</div><div class="sideScroll">'+list+'</div></section><section class="sideRecords"><div class="sideHeading"><span>处理记录</span><button data-act="recordscope">'+(recordsMode==='round'?'本轮 ▾':'全部 ▾')+'</button></div><div class="sideScroll" id="recordStream">'+(logs.length?logs.map(function(l){return '<div class="recordItem'+(S.me&&l.text.indexOf('@'+S.me.name)>=0?' mine':'')+'" data-record-id="'+esc(l.id)+'"><div class="stamp">第 '+l.round+' 轮 · '+timeOf(l.ts)+'</div>'+esc(l.text)+'</div>';}).join(''):'<div class="note">本轮暂无处理记录</div>')+'</div></section><details class="sideGoals"><summary>我的状态 / 项目目标</summary><div>'+goalPanelHTML()+'</div></details>';
 }
 function votePanelHTML(){
   var v=S.votes||{count:0,total:0,mine:null,tally:[]};
@@ -563,7 +686,7 @@ function votePanelHTML(){
     +'<div class="note" style="margin-top:5px">匿名投票，得票最高者被纳入绩效观察名单。已投 '+v.count+'/'+v.total+' 人</div><div class="voteGrid">';
   cands.forEach(function(p){
     h+='<button class="voteBtn'+(votePick===p.id?' sel':'')+'" data-act="pickvote" data-id="'+p.id+'" '+(v.mine?'disabled':'')+'>'
-      +'<span style="display:flex;gap:6px;align-items:center"><span class="avatar" style="background:'+avatarColor(p.name)+';width:20px;height:20px;font-size:11px">'+esc(p.name.slice(0,1))+'</span><b>'+esc(p.name)+'</b></span>'
+      +'<span style="display:flex;gap:6px;align-items:center"><span class="avatar" style="background:'+avatarColor(p.id||p.name)+';width:20px;height:20px;font-size:11px">'+esc(p.name.slice(0,1))+'</span><b>'+esc(p.name)+'</b></span>'
       +'<small>'+esc(p.roleLabel||'')+' ｜ '+esc(p.tierText)+'</small></button>';
   });
   h+='</div>';
@@ -587,7 +710,7 @@ function boardHTML(){
 function cardsHTML(){
   if(S.revealed.length) return S.revealed.map(function(r){ return revealCardHTML(r,false); }).join('');
   return S.players.filter(function(p){return !p.spect&&p.alive;}).map(function(p){
-    return '<div class="msgCard'+(p.submitted?'':' pend')+'"><div class="dcHead"><span class="avatar" style="background:'+avatarColor(p.name)+';width:20px;height:20px;font-size:11px">'+esc(p.name.slice(0,1))+'</span><b>'+esc(p.name)+'</b></div>'
+    return '<div class="msgCard'+(p.submitted?'':' pend')+'"><div class="dcHead"><span class="avatar" style="background:'+avatarColor(p.id||p.name)+';width:20px;height:20px;font-size:11px">'+esc(p.name.slice(0,1))+'</span><b>'+esc(p.name)+'</b></div>'
       +'<div class="dcQuote">'+(p.submitted?'需求卡已加密，评审会现场揭开':'正在整理需求…')+'</div></div>';
   }).join('');
 }
@@ -597,7 +720,7 @@ function meetingHTML(){
     +'<div class="meetingTiles" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">'
     +S.players.map(function(p){
         return '<div class="mRow'+(p.alive?'':' ') +'" style="text-align:center">'
-        +'<div style="display:flex;justify-content:center;margin-bottom:8px"><span class="avatar" style="background:'+avatarColor(p.name)+';width:48px;height:48px;border-radius:50%;font-size:19px">'+esc(p.name.slice(0,1))+'</span></div>'
+        +'<div style="display:flex;justify-content:center;margin-bottom:8px"><span class="avatar" style="background:'+avatarColor(p.id||p.name)+';width:48px;height:48px;border-radius:50%;font-size:19px">'+esc(p.name.slice(0,1))+'</span></div>'
         +'<div style="font-size:14px;font-weight:500">'+esc(p.name)+'</div>'
         +'<div class="mTags" style="justify-content:center">'+teamBadge(p)+roleBadge(p)+originBadge(p)+scoreBadge(p)+(p.bot?'<span class="bdg">虚拟同事</span>':'')+'</div>'
         +'<div class="bar"><div class="fill '+loadCls(p.tier)+'" style="width:'+loadPct(p)+'%"></div></div>'
@@ -667,7 +790,7 @@ function wizardHTML(){
   }
   h+='</div><aside class="wizSide"><div class="pTitle">协作群 · '+esc(S.roomId)+'</div><div class="invite">'+esc(invitationURL())+'<br><button data-act="copyinvite" style="margin-top:6px">邀请 / 复制地址</button></div><div class="pTitle" style="margin-top:16px">群成员 · '+S.players.length+' 人</div>';
   S.players.forEach(function(p){
-    h+='<div class="mRow"><div class="mTop"><span class="avatar" style="background:'+avatarColor(p.name)+'">'+esc(p.name.slice(0,1))+'</span><span class="nm">'+esc(p.name)+'</span>'+(p.isHost?'<span class="bdg host">主持人</span>':'')+(p.bot?'<span class="bdg">虚拟</span>':'')+'</div><div class="mTags">'+teamBadge(p)+roleBadge(p)+originBadge(p)+'</div>';
+    h+='<div class="mRow"><div class="mTop"><span class="avatar" style="background:'+avatarColor(p.id||p.name)+'">'+esc(p.name.slice(0,1))+'</span><span class="nm">'+esc(p.name)+'</span>'+(p.isHost?'<span class="bdg host">主持人</span>':'')+(p.bot?'<span class="bdg">虚拟</span>':'')+'</div><div class="mTags">'+teamBadge(p)+roleBadge(p)+originBadge(p)+'</div>';
     if(edit&&c.format==='team') h+='<select data-team-player="'+p.id+'" style="width:100%;margin-top:8px"><option value="">自动分组</option><option value="red"'+(p.team==='red'?' selected':'')+'>项目一组</option><option value="blue"'+(p.team==='blue'?' selected':'')+'>项目二组</option></select>';
     if(edit&&p.bot) h+='<button data-act="removebot" data-id="'+p.id+'" style="margin-top:6px;font-size:11px">移除</button>';
     h+='</div>';
@@ -681,6 +804,10 @@ function wizardHTML(){
 /* ---------------- 主渲染 ---------------- */
 function renderHeader(){
   $('#backToLobbyBtn').hidden=!(S.me&&S.me.isHost&&S.phase!=='lobby');
+  var supportsSidebar=(skin==='chat'||skin==='dingtalk')&&S.phase!=='lobby';
+  document.querySelector('.rightToggle').hidden=!supportsSidebar;
+  if(!supportsSidebar) sideOpen=false;
+  $('#sideBackdrop').hidden=!sideOpen;
   $('#mobileStatus').textContent=S.me?(S.me.spect?'观察期':('排期占用 '+loadPctSelf()+'%'))+' · '+S.goal.label+(S.scoreLabel?' '+S.me.score:'')+(S.config.format==='solo'?' · 第 '+S.challenge.stage+'/'+S.challenge.stages+' 关':''):'';
   $('#skinSel').value=skin;
   document.body.dataset.skin=skin;
@@ -699,7 +826,10 @@ function renderHeader(){
 }
 function renderMain(){
   var m=$('#main');
-  if(S.phase==='lobby'||S.phase==='over'){
+  var oldStream=$('#stream'), scrollInfo=oldStream?{top:oldStream.scrollTop,follow:oldStream.scrollHeight-oldStream.scrollTop-oldStream.clientHeight<70}:null;
+  var oldRecords=$('#recordStream'), recordScroll=oldRecords?{top:oldRecords.scrollTop,follow:oldRecords.scrollHeight-oldRecords.scrollTop-oldRecords.clientHeight<40}:null;
+  var oldGoals=m.querySelector('.sideGoals'), goalsOpen=oldGoals&&oldGoals.open;
+  if(S.phase==='lobby'||S.phase==='over'&&!S.started){
     var details=m.querySelector('details'), expanded=details&&details.open;
     m.innerHTML=wizardHTML();
     if(expanded&&m.querySelector('details')) m.querySelector('details').open=true;
@@ -709,7 +839,7 @@ function renderMain(){
   if(skin==='meeting'){ m.innerHTML=meetingHTML(); return; }
   m.innerHTML='<div class="imWrap">'
     +'<aside class="imSide">'
-      +'<div class="imMe"><span class="avatar" style="background:'+avatarColor(S.me?S.me.name:'')+'">'+esc((S.me?S.me.name:'?').slice(0,1))+'</span>'
+      +'<div class="imMe">'+portrait(personFor(S.me?S.me.id:null,S.me?S.me.name:'?'))
       +'<div style="min-width:0"><div class="nm">'+esc(S.me?S.me.name:'')+'</div><div class="rl">'+esc((S.meta.roles.filter(function(r){return r.key===(S.me||{}).role;})[0]||{}).label||'未分配')+((S.me&&S.me.originLabel)?(' · '+esc(S.me.originLabel)):'')+'</div></div></div>'
       +'<div class="imGroupName">群组</div>'
       +'<div class="imGroup active"><span class="gIco">#</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(S.config.group)+'</span></div>'
@@ -718,9 +848,11 @@ function renderMain(){
     +'</aside>'
     +'<section class="imMain"><div class="imHead">'+esc(S.config.group)+' <span class="sub">'+S.players.length+' 人 · '+esc(S.goal.label)+' · 第 '+S.round+'/'+S.goal.rounds+' 轮</span></div>'
       +'<div class="imStream" id="stream">'+streamHTML()+'</div></section>'
-    +'<aside class="imRight">'+goalPanelHTML()+membersHTML()+'</aside>'
+    +'<aside class="imRight'+(sideOpen?' open':'')+'">'+conversationSidebarHTML()+'</aside>'
     +'</div>';
-  var st=$('#stream'); if(st) st.scrollTop=st.scrollHeight;
+  var st=$('#stream');if(st)st.scrollTop=!scrollInfo||scrollInfo.follow?st.scrollHeight:scrollInfo.top;
+  var rs=$('#recordStream');if(rs)rs.scrollTop=!recordScroll||recordScroll.follow?rs.scrollHeight:recordScroll.top;
+  if(goalsOpen&&m.querySelector('.sideGoals'))m.querySelector('.sideGoals').open=true;
 }
 
 /* ---------------- 底部操作区 ---------------- */
@@ -868,6 +1000,7 @@ function sendSay(){
 }
 function toggleBoss(){
   bossOpen=!bossOpen;
+  if(bossOpen){sideOpen=false;$('#sideBackdrop').hidden=true;var sidebar=document.querySelector('.imRight');if(sidebar)sidebar.classList.remove('open');}
   $('#bossView').hidden=!bossOpen;
   document.title=bossOpen?'周报汇总 - 2026 Q4':((S?S.config.group:'团队沟通')+' - 团队沟通');
   if(!bossOpen) act('state');
@@ -915,6 +1048,9 @@ document.addEventListener('click',function(e){
   else if(a==='copyinvite') openShare();
   else if(a==='copylink') copyInvitation();
   else if(a==='closeshare') $('#shareDialog').hidden=true;
+  else if(a==='sidebar'){sideOpen=!sideOpen;render();}
+  else if(a==='closesidebar'){sideOpen=false;render();}
+  else if(a==='recordscope'){recordsMode=recordsMode==='round'?'all':'round';var rs=$('#recordStream');if(rs)rs.scrollTop=rs.scrollHeight;render();}
   else if(a==='backtolobby') act('backToLobby');
   else if(a==='leave') act('leave').then(function(d){ if(d&&d.ok){ S=null; logout('已退出房间，可以重新输入花名'); } });
   else if(a==='claimhost') act('claimHost');
