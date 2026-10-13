@@ -38,7 +38,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   if (d.querySelector('[data-act="start"]')) {
     // 先让第二名同事加入（真实场景：主持人等同事进来再立项）
-    const p2 = await (await fetch(ORIGIN + '/api/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '同事乙' }) })).json();
+    const p2 = await (await fetch(ORIGIN + '/api/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '同事乙', roomId: w.S.roomId }) })).json();
     console.log('9) 第二名同事已加入:', p2.state.players.length, '人');
     await sleep(600);
     d.querySelector('[data-act="start"]').click();

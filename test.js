@@ -224,8 +224,8 @@ async function runCase(cfg, names) {
   const host = await post('/api/join', { name: '边界测试员' });
   const H = { id: host.id, secret: host.secret };
   const bad = [
-    ['攻坚目标拒绝多人混战', { goal: 'resolve', format: 'pvp' }],
-    ['KPI 目标拒绝团队赛制', { goal: 'kpi', format: 'coop' }],
+    ['非法难度被拒', { difficulty: 'nope' }],
+    ['起始关卡超出总关数被拒', { stages: 2, startStage: 3 }],
     ['非法目标被拒', { goal: 'nope' }],
     ['非法行业被拒', { industry: 'nope' }],
     ['非法赛制被拒', { format: 'nope' }],

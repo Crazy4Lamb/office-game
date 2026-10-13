@@ -183,6 +183,16 @@ th{color:var(--sub);font-weight:400;background:var(--soft)}
 .loginCard input{width:100%;margin-bottom:10px;padding:10px 12px}
 .loginCard .go{width:100%;padding:10px;background:var(--acc);border-color:var(--acc);color:#fff;font-size:14px}
 .loginTip{font-size:11px;color:var(--sub);margin-top:12px;line-height:1.7}
+.launchPanel{padding:16px;border:1px solid #dbe5ff;background:#f7faff;border-radius:10px;margin:16px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.launchPanel .launchInfo{flex:1;min-width:190px}.launchPanel strong{display:block;font-size:14px;margin-bottom:5px}
+.advanced{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}.advanced summary{cursor:pointer;color:#4e5969;font-size:13px;margin-bottom:14px}
+.roomCard{padding:10px 12px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;gap:8px;margin:8px 0;background:#fff;text-align:left;width:100%}.roomCard small{display:block;color:var(--sub);margin-top:3px}
+.team-red{background:#fff1f0;color:#cf1322}.team-blue{background:#e8f0ff;color:#245bdb}
+.roomList{max-height:180px;overflow-y:auto;margin-top:10px}.invite{font-size:12px;line-height:1.8;word-break:break-all;background:var(--soft);padding:10px;border-radius:8px}
+.loginCard{width:420px;max-width:calc(100vw - 32px);max-height:90vh;overflow-y:auto}
+.wizInner{max-width:1120px}.wizard .wizSide{position:sticky;top:0}.fieldRow{display:flex;gap:12px;flex-wrap:wrap}.fieldRow label{font-size:12px;color:var(--sub);flex:1;min-width:110px}.fieldRow select{display:block;width:100%;margin-top:6px}
+body[data-skin="dingtalk"]{--acc:#1677ff;--side:#eef3fa;--bg:#f0f3f8}body[data-skin="dingtalk"] .imSide{width:220px;flex-basis:220px}body[data-skin="dingtalk"] .imGroup.active{background:#1677ff;color:#fff}
+@media(max-width:860px){.wizard .wizSide{position:static}}
 #toast{position:fixed;left:50%;top:66px;transform:translateX(-50%);background:rgba(29,33,41,.92);color:#fff;font-size:13px;padding:9px 18px;border-radius:8px;opacity:0;transition:opacity .2s;z-index:50;pointer-events:none;max-width:70vw;text-align:center}
 #toast.on{opacity:1}
 
@@ -221,11 +231,15 @@ body[data-skin="meeting"] .imMain{background:#f2f4f8}
     <div class="hbtns">
       <select id="skinSel">
         <option value="chat">群聊视图</option>
+        <option value="dingtalk">企业工作台</option>
         <option value="board">看板视图</option>
         <option value="meeting">会议视图</option>
       </select>
       <button data-act="rules">手册</button>
       <button data-act="boss">导出周报</button>
+      <button data-act="copyinvite">邀请同事</button>
+      <button data-act="backtolobby" id="backToLobbyBtn" hidden>返回筹备</button>
+      <button data-act="leave">退出房间</button>
       <span class="hint">Ctrl+B 老板键</span>
     </div>
   </header>
@@ -240,8 +254,11 @@ body[data-skin="meeting"] .imMain{background:#f2f4f8}
       <div><div class="t1" style="font-size:16px">团队沟通</div><div class="t2">项目协作 · 即时消息</div></div>
     </div>
     <input id="nameInput" maxlength="12" placeholder="输入花名 / 姓名">
+    <input id="roomInput" maxlength="6" placeholder="协作群编号（可选，留空创建新群）">
     <button class="go" id="joinBtn">进入协作空间</button>
-    <div class="loginTip" id="loginTip">同一局域网内的同事，用浏览器打开主持人电脑的地址即可进入同一个群。进入后在群内配置本季度目标、行业与职位。</div>
+    <div class="loginTip" id="loginTip">输入花名即可创建自己的协作群。加入同事的群可填写编号，或从下面选择。行业、目标、职位和工作方式都可以沿用默认值。</div>
+    <div class="roomList" id="roomList"></div>
+    <button data-act="refreshrooms" class="ghost" style="font-size:12px;margin-top:8px">刷新协作群列表</button>
   </div>
 </div>
 
@@ -275,7 +292,19 @@ body[data-skin="meeting"] .imMain{background:#f2f4f8}
 var S=null, me=null, es=null, picked={skill:null,target:null}, bossOpen=false, busy=false;
 var skin=localStorage.getItem('og_skin')||'chat';
 var votePick=null, lastParse=null, parseTimer=null, draftSay='';
+var actQueue=Promise.resolve();
+var draftChat='', turnTicker=null;
+$('#roomInput').value=new URLSearchParams(location.search).get('room')||'';
 try{ me=JSON.parse(sessionStorage.getItem('og_me')||'null'); }catch(e){ me=null; }
+if($('#roomInput').value&&me&&me.roomId!==$('#roomInput').value){ me=null; sessionStorage.removeItem('og_me'); }
+
+async function loadRooms(){
+  if(location.protocol==='file:') return;
+  try{
+    var response=await fetch('/api/rooms'), data=await response.json();
+    $('#roomList').innerHTML=(data.rooms||[]).map(function(r){return '<button class="roomCard" data-act="selectroom" data-id="'+esc(r.id)+'"><span class="avatar">#</span><span>'+esc(r.group)+'<small>'+esc(r.format+' · '+r.goal)+' · '+r.count+' 人 · '+(r.phase==='lobby'?'筹备中':'进行中，可观战')+' · '+esc(r.id)+'</small></span></button>';}).join('')||'<div class="loginTip">暂无协作群，留空编号即可新建。</div>';
+  }catch(e){ $('#roomList').textContent='请确认协作空间服务正在运行'; }
+}
 
 function $(s){ return document.querySelector(s); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -283,23 +312,31 @@ function toast(t){ var el=$('#toast'); el.textContent=t; el.className='on'; setT
 function avatarColor(name){ var cs=['#3370ff','#00b42a','#ff7d00','#f53f3f','#722ed1','#0fc6c2','#eb2f96','#13c2c2']; var h=0; for(var i=0;i<String(name).length;i++) h=(h*31+String(name).charCodeAt(i))%997; return cs[h%cs.length]; }
 function tagCls(t){ return t==='P0'?'t0':(t==='P1'?'t1':(t==='ULT'?'ULT':'t2')); }
 
-async function act(cmd,payload,opts){
-  if(!me||busy) return null;
-  busy=true;
+function act(cmd,payload,opts){
+  if(cmd==='parse') return requestAct(cmd,payload,opts);
+  var pending=actQueue.then(function(){return requestAct(cmd,payload,opts);});
+  actQueue=pending.catch(function(){return null;});
+  return pending;
+}
+async function requestAct(cmd,payload,opts){
+  var locks=cmd!=='parse';
+  if(!me) return null;
+  if(locks) busy=true;
   try{
     var r=await fetch('/api/act',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({id:me.id,secret:me.secret,cmd:cmd},payload||{}))});
     var d=await r.json();
     if(d.error) toast(d.error);
     if(d.state&&!(opts&&opts.noRender)){ S=d.state; render(); }
-    busy=false;
+    if(locks) busy=false;
     return d;
-  }catch(e){ busy=false; toast('网络异常，请稍后重试'); return null; }
+  }catch(e){ if(locks) busy=false; toast('网络异常，请稍后重试'); return null; }
 }
 
 function logout(msg){
   me=null; sessionStorage.removeItem('og_me');
   if(es){ try{ es.close(); }catch(e){} es=null; }
   $('#app').hidden=true; $('#login').hidden=false; $('#nameInput').value='';
+  history.replaceState(null,'',location.pathname); $('#roomInput').value=''; loadRooms();
   if(msg) toast(msg);
 }
 
@@ -322,13 +359,14 @@ async function boot(){
 }
 
 /* ---------------- 通用小组件 ---------------- */
-function loadPct(p){ if(p.isYou&&S.me) return Math.max(0,Math.round(100*S.me.bw/S.me.maxBw)); if(p.tier==='ok') return 12; if(p.tier==='warn') return 62; if(p.tier==='danger') return 87; if(p.tier==='out') return 100; return 0; }
+function loadPct(p){ if(p.spect) return 0; if(p.isYou&&S.me) return loadPctSelf(); if(p.tier==='ok') return 12; if(p.tier==='warn') return 62; if(p.tier==='danger') return 87; if(p.tier==='out') return 100; return 0; }
 function loadCls(t){ return t==='ok'?'ok':t==='warn'?'warn':t==='danger'?'danger':'out'; }
-function loadPctSelf(){ return S.me?Math.max(0,Math.round(100*S.me.bw/S.me.maxBw)):0; }
-function loadText(p){ if(p.isYou&&S.me) return '排期占用 '+loadPctSelf()+'%'; if(p.tier==='out') return '排期占用 100% · 已优化'; return p.tierText; }
+function loadPctSelf(){ return S.me?Math.max(0,Math.min(100,Math.round(100*(1-S.me.bw/S.me.maxBw)))):0; }
+function loadText(p){ if(p.spect) return '观察期'; if(p.isYou&&S.me) return '排期占用 '+loadPctSelf()+'%'; if(p.tier==='out') return '排期占用 100% · 已优化'; return p.tierText; }
 function scoreBadge(p){ if(!p.scoreLabel) return ''; return '<span class="bdg score">'+esc(p.scoreLabel)+' '+p.score+'</span>'; }
 function roleBadge(p,mini){ if(!p.role) return ''; return '<span class="bdg role">'+(p.roleIcon||'')+' '+esc(p.roleLabel)+(mini?'':'')+'</span>'; }
 function originBadge(p){ if(!p.origin||p.origin==='off'||!p.originLabel) return ''; return '<span class="bdg origin">'+(p.originIcon||'')+' '+esc(p.originLabel)+'</span>'; }
+function teamBadge(p){ return p.team?'<span class="bdg team-'+p.team+'">'+(p.team==='red'?'项目一组':'项目二组')+'</span>':''; }
 function bossByName(n){ return S.players.filter(function(x){return x.name===n;})[0]; }
 
 /* ---------------- 右侧：成员 ---------------- */
@@ -345,7 +383,7 @@ function membersHTML(){
     h+='<div class="mRow"><div class="mTop"><span class="avatar" style="background:'+avatarColor(p.name)+'">'+esc(p.name.slice(0,1))+'</span>'
       +'<span class="nm">'+esc(p.name)+'</span>'
       +(S.phase==='select'&&p.alive&&!p.spect?'<span class="dot'+(p.submitted?' on':'')+'" title="'+(p.submitted?'已提交':'编辑中')+'"></span>':'')+'</div>'
-      +'<div class="mTags">'+roleBadge(p)+originBadge(p)+scoreBadge(p)+badges+'</div>'
+      +'<div class="mTags">'+teamBadge(p)+roleBadge(p)+originBadge(p)+scoreBadge(p)+badges+(p.bot?'<span class="bdg">虚拟同事</span>':'')+'</div>'
       +'<div class="bar"><div class="fill '+loadCls(p.tier)+'" style="width:'+loadPct(p)+'%"></div></div>'
       +'<div class="tierTxt '+(p.tier==='danger'?'danger':'')+'">'+esc(loadText(p))+'</div></div>';
   });
@@ -355,13 +393,15 @@ function membersHTML(){
 /* ---------------- 右侧：目标面板 ---------------- */
 function goalPanelHTML(){
   var g=S.goal, h='';
+  if(S.config.format==='solo') h+='<div class="goalBox"><div class="gl"><span>项目进度</span><span>'+esc(S.challenge.difficulty)+'</span></div><div class="gv">'+S.challenge.stage+' <span style="font-size:13px">/ '+S.challenge.stages+'</span></div><div class="gd">'+esc(goalSummary(g.key))+'</div></div>';
+  if(S.teams&&S.teams.length) h+='<div class="goalBox"><div class="gl"><span>小组进度</span></div>'+S.teams.map(function(t){return '<div style="font-size:12px;line-height:2"><span class="bdg team-'+t.key+'">'+esc(t.name)+'</span> '+t.alive+'/'+t.count+' 人 · '+(S.scoreLabel?esc(S.scoreLabel)+' '+t.score:'项目贡献 '+t.work)+'</div>';}).join('')+'</div>';
   if(S.boss){
     var pct=Math.max(0,Math.round(S.boss.hp/S.boss.maxHp*100));
     h+='<div class="bossBox"><div class="bl"><span>'+esc(S.boss.label)+'（第 '+S.boss.level+' 关）</span><span>剩 '+S.boss.hp+'/'+S.boss.maxHp+'</span></div>'
       +'<div class="bar"><div class="fill danger" style="width:'+pct+'%"></div></div>'
       +(S.boss.telegraph?'<div class="tele">本轮点名：'+esc(S.boss.telegraph.name)+'</div>':'')+'</div>';
   }
-  if(S.me && g.kind!=='boss'){
+  if(S.me && S.scoreLabel){
     var val = S.me.score, goalVal = g.target||100;
     var pct2 = Math.max(0,Math.min(100,Math.round(val/goalVal*100)));
     h+='<div class="goalBox"><div class="gl"><span>'+esc(g.icon)+' '+esc(g.label)+'</span><span>'+esc(S.scoreLabel)+'</span></div>'
@@ -382,12 +422,12 @@ function goalPanelHTML(){
   if(S.me){
     var m=S.me;
     h+='<div class="goalBox"><div class="gl"><span>我的状态</span></div>'
-      +(m.role?'<div style="font-size:12px;line-height:1.9">职位：<b>'+esc(m.roleLabel||'')+'</b> '+(S.meta.roles.filter(function(r){return r.key===m.role;})[0]||{}).icon||''
+      +(m.role?'<div style="font-size:12px;line-height:1.9">职位：<b>'+esc(m.roleLabel||'')+'</b> '+esc((S.meta.roles.filter(function(r){return r.key===m.role;})[0]||{}).icon||'')
         +'<br>被动：'+esc(m.passiveText||'—')
         +(m.origin?'<br>出身：<b>'+esc((S.meta.origins.filter(function(o){return o.key===m.origin;})[0]||{}).label||'')+'</b> '+esc((S.meta.origins.filter(function(o){return o.key===m.origin;})[0]||{}).desc||''):'')
         +'</div>':'')
-      +'<div class="bar" style="margin-top:8px"><div class="fill '+loadCls(m.alive?'ok':(loadPctSelf()>=75?'danger':loadPctSelf()>=50?'warn':'ok'))+'" style="width:'+loadPctSelf()+'%"></div></div>'
-      +'<div class="tierTxt">排期占用 '+loadPctSelf()+'% ｜ 摸鱼值 '+m.slack+'/'+m.maxSlack+'</div>'
+      +'<div class="bar" style="margin-top:8px"><div class="fill '+loadCls(m.spect?'spect':(!m.alive?'out':(loadPctSelf()>=75?'danger':loadPctSelf()>=50?'warn':'ok')))+'" style="width:'+(m.spect?0:loadPctSelf())+'%"></div></div>'
+      +'<div class="tierTxt">'+(m.spect?'观察期':'排期占用 '+loadPctSelf()+'%')+' ｜ 摸鱼值 '+m.slack+'/'+m.maxSlack+'</div>'
       +((m.dots&&m.dots.length)?'<div class="tierTxt danger">在身负担：'+m.dots.map(function(d){return esc(d.label)+' -'+d.dmg+'×'+d.dur;}).join('、')+'</div>':'')
       +'</div>';
   }
@@ -423,7 +463,7 @@ function streamHTML(){
   });
   if(S.phase==='vote') out+=votePanelHTML();
   if(S.revealed.length){ S.revealed.forEach(function(r){ out+='<div class="msgRow">'+revealCardHTML(r,true)+'</div>'; }); }
-  else if(S.phase==='select'){ S.players.filter(function(p){return !p.spect;}).forEach(function(p){ out+=pendingHTML(p); }); }
+  else if(S.phase==='select'){ S.players.filter(function(p){return !p.spect&&p.alive;}).forEach(function(p){ out+=pendingHTML(p); }); }
   return out;
 }
 function votePanelHTML(){
@@ -456,7 +496,7 @@ function boardHTML(){
 }
 function cardsHTML(){
   if(S.revealed.length) return S.revealed.map(function(r){ return revealCardHTML(r,false); }).join('');
-  return S.players.filter(function(p){return !p.spect;}).map(function(p){
+  return S.players.filter(function(p){return !p.spect&&p.alive;}).map(function(p){
     return '<div class="msgCard'+(p.submitted?'':' pend')+'"><div class="dcHead"><span class="avatar" style="background:'+avatarColor(p.name)+';width:20px;height:20px;font-size:11px">'+esc(p.name.slice(0,1))+'</span><b>'+esc(p.name)+'</b></div>'
       +'<div class="dcQuote">'+(p.submitted?'需求卡已加密，评审会现场揭开':'正在整理需求…')+'</div></div>';
   }).join('');
@@ -469,7 +509,7 @@ function meetingHTML(){
         return '<div class="mRow'+(p.alive?'':' ') +'" style="text-align:center">'
         +'<div style="display:flex;justify-content:center;margin-bottom:8px"><span class="avatar" style="background:'+avatarColor(p.name)+';width:48px;height:48px;border-radius:50%;font-size:19px">'+esc(p.name.slice(0,1))+'</span></div>'
         +'<div style="font-size:14px;font-weight:500">'+esc(p.name)+'</div>'
-        +'<div class="mTags" style="justify-content:center">'+roleBadge(p)+originBadge(p)+scoreBadge(p)+'</div>'
+        +'<div class="mTags" style="justify-content:center">'+teamBadge(p)+roleBadge(p)+originBadge(p)+scoreBadge(p)+(p.bot?'<span class="bdg">虚拟同事</span>':'')+'</div>'
         +'<div class="bar"><div class="fill '+loadCls(p.tier)+'" style="width:'+loadPct(p)+'%"></div></div>'
         +'<div class="tierTxt">'+esc(loadText(p))+'</div></div>';
       }).join('')
@@ -481,106 +521,79 @@ function optCard(sel, opt, value, on, oh, disabled){
   return '<button class="optCard'+(sel?' sel':'')+'"'+(opt?' data-opt="'+opt+'" data-value="'+esc(value)+'"':'')+(disabled?' disabled':'')+'>'
     +'<span class="on">'+on+'</span>'+(oh?'<span class="oh">'+oh+'</span>':'')+'</button>';
 }
+function goalSummary(key){
+  var mode=S.config.format, solo=mode==='solo', team=mode==='team'||mode==='coop';
+  if(key==='battle') return solo||mode==='coop'?'完成需求池，保住自己的带宽':'撑到最后；组队时以整组存活判断';
+  if(key==='kpi') return solo?'每关 KPI 达到 100，继续下一个项目':team?'全组累计 KPI 先到 100 即达标':'个人 KPI 先到 100 即晋升';
+  if(key==='okr') return solo?'每关完成自己的 O，完成度达到 100%':team?'全组累计 O 进度达到 100%':'认领 O，个人完成度先到 100%';
+  if(key==='deadline') return solo?'每关 10 轮窗口，交付至少 60 才能继续':mode==='coop'?'10 轮内全组累计交付达到 100':'固定 10 轮窗口，到期比较交付量';
+  return solo?'逐关完成项目需求池':team&&mode==='coop'?'全组一起完成项目需求池':'清空共享项目，按个人或小组交付贡献评定';
+}
+function configSelect(key,label,options,value,disabled){
+  return '<label>'+esc(label)+'<select data-config="'+key+'"'+(disabled?' disabled':'')+'>'+options.map(function(o){return '<option value="'+esc(o[0])+'"'+(String(o[0])===String(value)?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select></label>';
+}
 function wizardHTML(){
-  var isHost=S.me&&S.me.isHost, c=S.config, canEdit=isHost&&S.phase==='lobby';
-  var goalKind=(S.meta.goals.filter(function(g){return g.key===c.goal;})[0]||{}).kind;
+  var c=S.config, host=S.me&&S.me.isHost, edit=host&&S.phase==='lobby';
+  var need=c.format==='solo'?1:c.format==='team'?c.teamSize*2:2;
+  var tooMany=(c.format==='duel'||c.format==='team')&&S.players.length>need;
+  var mode=S.format;
   var h='<div class="wizard"><div class="wizInner"><div class="wizMain">';
-  h+='<div class="wizH">'+(S.started?'配置房间':'新建协作群')+'</div>'
-    +'<div class="wizSub">'+(canEdit?'你是群主，下面每一项都可以自由组合；也可以全部用默认值直接立项。':'等待群主配置房间参数…')+'</div>';
-
-  h+='<div class="wizSec"><div class="wizLbl"><b>群名称</b><span>群列表里显示的名字</span></div>'
-    +(canEdit?'<input class="wizInput" id="groupInput" value="'+esc(c.group)+'" maxlength="24" placeholder="例如：交易中台 · 项目群">':'<div class="wizInput" style="background:var(--soft)">'+esc(c.group)+'</div>')
-    +'</div>';
-
-  h+='<div class="wizSec"><div class="wizLbl"><b>行业</b><span>影响黑话措辞、事件卡与攻坚对象</span></div><div class="optGrid">';
-  S.meta.industries.forEach(function(i){
-    h+=optCard(c.industry===i.key, canEdit?'industry':'', i.key, esc(i.icon+' '+i.label), esc(i.group), !canEdit);
-  });
+  h+='<div class="wizH">'+(S.phase==='over'?'本季度评审':'新建项目协作群')+'</div><div class="wizSub">'+(edit?'任选工作方式和目标，其余设置可以沿用默认值。单人、双人或小组都能开局。':'主持人配置协作安排，所有成员实时同步。')+'</div>';
+  if(S.phase==='over') h+='<div class="launchPanel">'+winnerText()+(host?'<button class="primary" data-act="restart">开启新一轮</button>':'')+'</div>';
+  else h+='<div class="launchPanel"><div class="launchInfo"><strong>'+esc(mode.label+' · '+S.goal.label)+'</strong><span class="note">'+esc(goalSummary(c.goal))+'<br>已加入 '+S.players.length+' 位成员'+(S.players.length<need?'，还需 '+(need-S.players.length)+' 位，可使用虚拟同事':tooMany?'，超出 '+(S.players.length-need)+' 位，请移除虚拟同事或调整每组人数':'')+'</span></div>'+(edit?'<button class="primary" data-act="start"'+(S.players.length<need||tooMany?' disabled':'')+'>创建并立项</button><button data-act="solostart">直接开始单人演练</button>':'<span class="note">等待主持人立项</span>')+'</div>';
+  h+='<div class="wizSec"><div class="wizLbl"><b>协作群名称</b><span>工作群列表中显示</span></div>'+(edit?'<input class="wizInput" id="groupInput" value="'+esc(c.group)+'" maxlength="24" placeholder="例如：交易中台 · 项目群">':'<div>'+esc(c.group)+'</div>')+'</div>';
+  h+='<div class="wizSec"><div class="wizLbl"><b>协作安排</b><span>赛制和目标可以自由组合</span></div><div class="optGrid">';
+  S.meta.formats.forEach(function(f){h+=optCard(c.format===f.key,edit?'format':'',f.key,esc(f.icon+' '+(f.key==='team'?'小组竞标 · '+c.teamSize+'v'+c.teamSize:f.label)),esc(f.hint),!edit);});
+  h+='</div></div><div class="wizSec"><div class="wizLbl"><b>本季度目标</b><span>按什么评定结果</span></div><div class="optGrid">';
+  S.meta.goals.forEach(function(g){h+=optCard(c.goal===g.key,edit?'goal':'',g.key,esc(g.icon+' '+g.label),esc(goalSummary(g.key)),!edit);});
   h+='</div></div>';
-
-  h+='<div class="wizSec"><div class="wizLbl"><b>本季度目标</b><span>决定拿什么算赢</span></div><div class="optGrid">';
-  S.meta.goals.forEach(function(g){
-    h+=optCard(c.goal===g.key, canEdit?'goal':'', g.key, esc(g.icon+' '+g.label), esc(g.desc), !canEdit);
-  });
-  h+='</div></div>';
-
-  h+='<div class="wizSec"><div class="wizLbl"><b>赛制</b><span>'+(goalKind==='boss'?'攻坚类目标可选团队或单人':'该目标只支持多人混战')+'</span></div><div class="optGrid">';
-  var fmts=[{k:'pvp',n:'👥 多人混战',h:'同事之间互相提需求'},{k:'coop',n:'🤝 团队攻坚',h:'合力打空需求池，有人出局即失败'},{k:'solo',n:'🎯 单人演练',h:'一人对抗甲方，连过三关'}];
-  fmts.forEach(function(f){
-    var dis=!canEdit||(goalKind==='boss'?(f.k==='pvp'):(f.k!=='pvp'));
-    h+=optCard(c.format===f.k, dis?'':'format', f.k, f.n, f.h, dis);
-  });
-  h+='</div></div>';
-
-  h+='<div class="wizSec"><div class="wizLbl"><b>出手方式</b><span>你想怎么提需求</span></div><div class="optGrid">';
-  S.meta.inputModes.forEach(function(m){ h+=optCard(c.inputMode===m.key, canEdit?'inputmode':'', m.key, esc(m.icon+' '+m.label), esc(m.hint), !canEdit); });
-  h+='</div></div>';
-
-  h+='<div class="wizSec"><div class="wizLbl"><b>职位分配</b><span>研发/测试/产品/总监……每人 2 个专属操作</span></div><div class="optGrid">';
-  S.meta.roleAssign.forEach(function(r){ h+=optCard(c.roleAssign===r.key, canEdit?'roleassign':'', r.key, esc(r.label), esc(r.hint), !canEdit); });
-  h+='</div></div>';
-
-  h+='<div class="wizSec"><div class="wizLbl"><b>出身</b><span>嫡系 / 炮灰 / 空降 / 卷王……带被动效果</span></div><div class="optGrid">';
-  S.meta.originModes.forEach(function(o){ h+=optCard(c.originMode===o.key, canEdit?'originmode':'', o.key, esc(o.label), esc(o.hint), !canEdit); });
-  h+='</div></div>';
-
-  // 认领职位
+  if(c.format==='solo'){
+    h+='<div class="wizSec"><div class="wizLbl"><b>项目难度</b><span>每个项目递进，完成后恢复带宽与冷却</span></div><div class="optGrid">';
+    S.meta.difficulties.forEach(function(d){h+=optCard(c.difficulty===d.key,edit?'difficulty':'',d.key,esc(d.label),esc(d.hint),!edit);});
+    var levels=Array.from({length:10},function(_,i){return [i+1,'第 '+(i+1)+' 关'];});
+    h+='</div><div class="fieldRow" style="margin-top:12px">'+configSelect('startStage','从哪一关开始',levels,c.startStage,!edit)+configSelect('stages','最后一关',levels,c.stages,!edit)+'</div></div>';
+  }
+  if(c.format==='team') h+='<div class="wizSec fieldRow">'+configSelect('teamSize','每组人数',[[1,'1v1'],[2,'2v2'],[3,'3v3'],[4,'4v4'],[5,'5v5']],c.teamSize,!edit)+configSelect('friendlyFire','组内冲突', [['off','关闭，互相支援'],['on','开启，允许组内需求']],c.friendlyFire,!edit)+'</div>';
+  h+='<div class="wizSec"><div class="wizLbl"><b>工作方式</b><span>选择模板、关键词、普通对话，也可混用</span></div><div class="optGrid">';
+  S.meta.inputModes.forEach(function(m){h+=optCard(c.inputMode===m.key,edit?'inputmode':'',m.key,esc(m.icon+' '+m.label),esc(m.hint),!edit);});
+  h+='</div></div><details class="advanced"><summary>更多安排 · 行业、职位、出身与提交窗口</summary>';
+  h+='<div class="wizSec"><div class="wizLbl"><b>行业</b><span>影响用语、专属操作、事件与甲方</span></div><div class="optGrid">';
+  S.meta.industries.forEach(function(i){h+=optCard(c.industry===i.key,edit?'industry':'',i.key,esc(i.icon+' '+i.label),esc(i.group),!edit);});
+  h+='</div></div><div class="wizSec"><div class="wizLbl"><b>职位分配</b><span>每个职位有专属操作与被动</span></div><div class="optGrid">';
+  S.meta.roleAssign.forEach(function(r){h+=optCard(c.roleAssign===r.key,edit?'roleassign':'',r.key,esc(r.label),esc(r.hint),!edit);});
+  h+='</div></div><div class="wizSec"><div class="wizLbl"><b>出身</b><span>嫡系、炮灰、空降、卷王……也可关闭</span></div><div class="optGrid">';
+  S.meta.originModes.forEach(function(o){h+=optCard(c.originMode===o.key,edit?'originmode':'',o.key,esc(o.label),esc(o.hint),!edit);});
+  h+='</div></div><div class="fieldRow">'+configSelect('turnSeconds','每轮提交窗口',[[0,'不限时，全部提交后结算'],[30,'30 秒'],[60,'60 秒'],[120,'120 秒']],c.turnSeconds,!edit)+'</div></details>';
   if(c.roleAssign==='pick'&&S.me&&!S.me.role){
-    h+='<div class="wizSec" style="background:#f7faff;border:1px solid #cfe0ff;border-radius:10px;padding:12px"><div class="wizLbl"><b>认领你的职位</b><span>先到先得</span></div><div class="optGrid">';
-    var taken=S.players.filter(function(p){return p.role;}).map(function(p){return p.role;});
-    S.meta.roles.forEach(function(r){
-      h+=optCard(false, taken.indexOf(r.key)>=0?'':'pickrole', r.key, esc(r.icon+' '+r.label), esc(taken.indexOf(r.key)>=0?'已被认领':r.blurb), taken.indexOf(r.key)>=0);
-    });
+    h+='<div class="wizSec" style="margin-top:16px"><div class="wizLbl"><b>认领你的职位</b></div><div class="optGrid">';
+    var taken=S.players.map(function(p){return p.role;});
+    S.meta.roles.forEach(function(r){var occupied=taken.indexOf(r.key)>=0;h+=optCard(false,occupied?'':'pickrole',r.key,esc(r.icon+' '+r.label),esc(occupied?'已被认领':r.blurb),occupied);});
     h+='</div></div>';
   }
-
-  // 我的身份卡
   if(S.me){
-    var myRole=S.meta.roles.filter(function(r){return r.key===S.me.role;})[0];
-    var myOrigin=S.meta.origins.filter(function(o){return o.key===S.me.origin;})[0];
-    h+='<div class="wizSec" style="background:#f7faff;border:1px solid #cfe0ff;border-radius:10px;padding:12px">'
-      +'<div class="wizLbl"><b>我的身份</b></div>'
-      +'<div style="font-size:13px;line-height:2">'
-      +(myRole?('职位：<b>'+esc(myRole.icon+' '+myRole.label)+'</b>　专属操作：'+esc(myRole.skills.join(' / '))+'<br><span style="color:var(--sub);font-size:12px">被动：'+esc(myRole.passive)+'</span><br>'):'<span style="color:var(--warn)">尚未分配职位</span><br>')
-      +(myOrigin?('出身：<b>'+esc(myOrigin.icon+' '+myOrigin.label)+'</b>　<span style="color:var(--sub);font-size:12px">'+esc(myOrigin.desc)+'</span>'):'<span style="color:var(--sub);font-size:12px">本局未启用出身</span>')
-      +'</div>'
-      +(c.originMode!=='off'&&S.phase==='lobby'?'<div style="margin-top:8px"><button data-act="reroll">重新抽取出身</button></div>':'')
-      +'</div>';
+    var r=S.meta.roles.filter(function(r){return r.key===S.me.role;})[0];
+    var o=S.meta.origins.filter(function(o){return o.key===S.me.origin;})[0];
+    h+='<div class="launchPanel"><div class="launchInfo"><strong>我的身份 · '+esc(r?r.icon+' '+r.label:'待认领')+'</strong><span class="note">'+esc(r?r.skills.join(' / ')+' · '+r.passive:'请先认领职位')+'<br>'+esc(o?o.icon+' '+o.label+' · '+o.desc:'未启用出身')+'</span></div>'+(edit&&c.originMode!=='off'?'<button data-act="reroll">重新抽取出身</button>':'')+'</div>';
   }
-
-  h+='<div class="wizFoot">';
-  if(canEdit){
-    h+='<button class="primary" data-act="start" style="padding:8px 22px">立项，开始本季度</button>';
-  } else if(S.phase==='lobby'){
-    var hostP=S.players.filter(function(x){return x.isHost;})[0];
-    h+='<span class="note">等待群主 '+(hostP?('@'+esc(hostP.name)):'')+' 立项…</span>'
-      +'<button data-act="claimhost" style="margin-left:10px">群主不在？我来主持</button>';
-  } else {
-    h+='<button data-act="restart">开启新一轮</button>';
-  }
-  h+='<span class="note">已加入 '+S.players.length+' 人'+(S.players.length<((c.format==='solo')?1:2)?('，至少需要 '+((c.format==='solo')?1:2)+' 人'):'')+'</span></div>';
-  h+='</div>';
-
-  // 侧栏
-  h+='<div class="wizSide"><div class="pTitle">群成员</div><div class="mList">'
-    +S.players.map(function(p){
-        return '<div class="mLite"><span class="avatar" style="background:'+avatarColor(p.name)+'">'+esc(p.name.slice(0,1))+'</span>'
-          +'<span class="nm">'+esc(p.name)+'</span>'
-          +(p.isHost?'<span class="bdg host">群主</span>':'')+(p.isYou?'<span class="bdg you">我</span>':'')+'</div>'
-          +'<div class="mTags" style="margin:0 0 4px 33px">'+roleBadge(p)+originBadge(p)+'</div>';
-      }).join('')
-    +'</div><div class="pTitle" style="margin-top:16px">同事加入地址</div><div class="joinBox">'
-    +(S.urls.length?S.urls.map(function(u){return esc(u);}).join('<br>'):'请用群主电脑的局域网 IP 访问')+'</div></div>';
-
-  h+='</div></div>';
+  h+='</div><aside class="wizSide"><div class="pTitle">协作群 · '+esc(S.roomId)+'</div><div class="invite">'+esc(location.origin+S.joinUrl)+'<br><button data-act="copyinvite" style="margin-top:6px">复制邀请地址</button></div><div class="pTitle" style="margin-top:16px">群成员 · '+S.players.length+' 人</div>';
+  S.players.forEach(function(p){
+    h+='<div class="mRow"><div class="mTop"><span class="avatar" style="background:'+avatarColor(p.name)+'">'+esc(p.name.slice(0,1))+'</span><span class="nm">'+esc(p.name)+'</span>'+(p.isHost?'<span class="bdg host">主持人</span>':'')+(p.bot?'<span class="bdg">虚拟</span>':'')+'</div><div class="mTags">'+teamBadge(p)+roleBadge(p)+originBadge(p)+'</div>';
+    if(edit&&c.format==='team') h+='<select data-team-player="'+p.id+'" style="width:100%;margin-top:8px"><option value="">自动分组</option><option value="red"'+(p.team==='red'?' selected':'')+'>项目一组</option><option value="blue"'+(p.team==='blue'?' selected':'')+'>项目二组</option></select>';
+    if(edit&&p.bot) h+='<button data-act="removebot" data-id="'+p.id+'" style="margin-top:6px;font-size:11px">移除</button>';
+    h+='</div>';
+  });
+  if(edit&&c.format!=='solo') h+='<div class="barRow"><button data-act="addbot">添加虚拟同事</button><button class="primary" data-act="fillseats">补齐成员</button></div><p class="note" style="margin-top:8px">虚拟同事会自动提交；真实同事通过邀请地址进入同一协作群。</p>';
+  if(!host&&S.phase==='lobby') h+='<button data-act="claimhost">主持人不在？我来主持</button>';
+  h+='<div class="pTitle" style="margin-top:16px">局域网邀请</div><div class="joinBox">'+S.urls.map(function(u){return esc(u+S.joinUrl);}).join('<br>')+'</div></aside></div></div>';
   return h;
 }
 
 /* ---------------- 主渲染 ---------------- */
 function renderHeader(){
+  $('#backToLobbyBtn').hidden=!(S.me&&S.me.isHost&&S.phase!=='lobby');
   $('#skinSel').value=skin;
   document.body.dataset.skin=skin;
-  var titles={chat:[S.config.group,'即时消息 · 项目群'],board:['迭代看板','团队协作空间'],meeting:['视频会议','季度对齐会']};
+  var titles={chat:[S.config.group,'即时消息 · 项目群'],dingtalk:[S.config.group,'企业工作台 · 团队协同'],board:['迭代看板','团队协作空间'],meeting:['视频会议','季度对齐会']};
   var t=titles[skin]||titles.chat;
   $('#appTitle').textContent=t[0];
   $('#appSub').textContent=t[1];
@@ -595,8 +608,12 @@ function renderHeader(){
 }
 function renderMain(){
   var m=$('#main');
-  if(S.phase==='lobby'||S.phase==='over'&&!S.started){ m.innerHTML=wizardHTML(); return; }
-  if(S.phase==='over'){ m.innerHTML=wizardHTML(); return; }
+  if(S.phase==='lobby'||S.phase==='over'){
+    var details=m.querySelector('details'), expanded=details&&details.open;
+    m.innerHTML=wizardHTML();
+    if(expanded&&m.querySelector('details')) m.querySelector('details').open=true;
+    return;
+  }
   if(skin==='board'){ m.innerHTML=boardHTML(); return; }
   if(skin==='meeting'){ m.innerHTML=meetingHTML(); return; }
   m.innerHTML='<div class="imWrap">'
@@ -606,7 +623,7 @@ function renderMain(){
       +'<div class="imGroupName">群组</div>'
       +'<div class="imGroup active"><span class="gIco">#</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(S.config.group)+'</span></div>'
       +'<div class="imGroup"><span class="gIco">☕</span><span>茶水间（休息中）</span></div>'
-      +'<div class="imSideFoot">'+(S.urls.length?esc(S.urls[0]):'局域网地址见群主控制台')+'</div>'
+      +'<div class="imSideFoot">协作群 '+esc(S.roomId)+'<br>'+(S.urls.length?esc(S.urls[0]+S.joinUrl):'局域网地址见群主控制台')+'</div>'
     +'</aside>'
     +'<section class="imMain"><div class="imHead">'+esc(S.config.group)+' <span class="sub">'+S.players.length+' 人 · '+esc(S.goal.label)+' · 第 '+S.round+'/'+S.goal.rounds+' 轮</span></div>'
       +'<div class="imStream" id="stream">'+streamHTML()+'</div></section>'
@@ -618,18 +635,27 @@ function renderMain(){
 /* ---------------- 底部操作区 ---------------- */
 function skillBtnHTML(s){
   var cd=(S.me.cds&&S.me.cds[s.key])||0, sel=picked.skill===s.key;
-  return '<button class="skillBtn'+(sel?' sel':'')+(s.ultimate?' ult':'')+'" data-act="skill" data-skill="'+s.key+'" title="'+esc(s.quote)+'（'+esc(s.effect)+'）"'+(cd>0?' disabled':'')+'>'
+  var unavailable=s.needTarget&&!targetCandidates(s).length&&!(S.boss&&s.bossOk);
+  return '<button class="skillBtn'+(sel?' sel':'')+(s.ultimate?' ult':'')+'" data-act="skill" data-skill="'+s.key+'" title="'+esc(unavailable?'当前没有可用接收人':s.quote+'（'+s.effect+'）')+'"'+(cd>0||unavailable?' disabled':'')+'>'
     +'<span style="font-size:12px">'+esc(s.label)+' <span class="tag '+tagCls(s.tag)+'">'+esc(s.tag)+'</span></span>'
     +'<small>'+(cd>0?('冷却中 '+cd+' 轮'):esc(s.effect.slice(0,22)))+'</small></button>';
+}
+function targetCandidates(skill){
+  return S.players.filter(function(p){
+    if(!p.alive||p.spect||!S.me||p.id===S.me.id||S.config.format==='solo') return false;
+    if(S.config.format!=='team') return true;
+    var supportive=skill.kind==='heal'||skill.kind==='buff', same=p.team===S.me.team;
+    return supportive?same:(S.config.friendlyFire==='on'||!same);
+  });
 }
 function targetSelHTML(){
   var sk=picked.skill&&S.me?S.me.tools.filter(function(x){return x.key===picked.skill;})[0]:null;
   if(!sk) return '<select id="targetSel" disabled><option>先选一个需求模板</option></select>';
   if(!sk.needTarget) return '<select id="targetSel" disabled><option>无需指定接收人</option></select>';
   var opts='';
-  if(S.boss&&sk.bossOk) opts+='<option value="boss">'+esc(S.industry.boss)+'（'+esc(S.industry.target)+'）</option>';
-  S.players.filter(function(p){ return p.alive&&!p.spect&&!(S.me&&p.id===S.me.id); }).forEach(function(p){
-    opts+='<option value="'+p.id+'">'+esc(p.name)+(p.roleLabel?('（'+p.roleLabel+'）'):'')+'</option>';
+  if(S.boss&&sk.bossOk) opts+='<option value="boss"'+(picked.target==='boss'?' selected':'')+'>'+esc(S.industry.boss)+'（'+esc(S.industry.target)+'）</option>';
+  targetCandidates(sk).forEach(function(p){
+    opts+='<option value="'+p.id+'"'+(picked.target===p.id?' selected':'')+'>'+esc(p.name)+(p.roleLabel?('（'+p.roleLabel+'）'):'')+'</option>';
   });
   return '<select id="targetSel">'+(opts||'<option value="">暂无可选接收人</option>')+'</select>';
 }
@@ -637,7 +663,7 @@ function textInputHTML(){
   var m=c_();
   if(m==='keyword'){
     var kws=['甩锅','加需求','排期后置','驳回','借调','闭环','摸鱼','向上管理'];
-    if(S.goal.kind==='boss') kws=['加需求','借调','闭环','向上管理','摸鱼'];
+    if(S.boss) kws=['加需求','借调','闭环','向上管理','摸鱼'];
     return '<div class="barRow" style="gap:5px">'+kws.map(function(k){ return '<span class="kwChip" data-act="kw" data-kw="'+esc(k)+'">'+esc(k)+'</span>'; }).join('')+'</div>'
       +'<div class="barRow"><input id="sayInput" maxlength="120" style="flex:1" placeholder="打关键词，例如：甩锅 @张三 / 这个先排到下个迭代">'
       +'<button class="primary" data-act="say">提交需求</button><span id="parseHint" class="parseHint">试试：把锅甩给他</span></div>';
@@ -656,34 +682,43 @@ function winnerText(){
 }
 function renderBar(){
   var h='', m=S.me;
-  if(S.phase==='lobby'){ h='<div class="barRow"><span class="note">'+(m&&m.isHost?'在左侧配置好之后点「立项，开始本季度」':'等待群主立项…若群主已离开，可点「我来主持」接管')+'</span></div>'; }
+  if(S.phase==='lobby'){ h='<div class="barRow"><span class="note">'+(m&&m.isHost?'选择安排后点「创建并立项」；一个人可点「直接开始单人演练」':'等待主持人立项…若主持人已离开，可点「我来主持」接管')+'</span></div>'; }
   else if(S.phase==='over'){ h='<div class="barRow">'+winnerText()+((m&&m.isHost)?'<button class="primary" data-act="restart">开启新一轮</button>':'')+'</div>'; }
   else if(S.phase==='vote'){ h='<div class="barRow"><span class="note">周报互评进行中：'+(S.votes?S.votes.count:0)+'/'+(S.votes?S.votes.total:0)+' 人已投票</span></div>'; }
   else if(S.phase==='review'){ h='<div class="barRow"><span class="note">评审会进行中，正在逐条结算需求…</span></div>'; }
   else {
-    if(!m||m.spect||!m.alive){ h='<div class="barRow"><span class="note">你当前处于观察期，可观战但暂不能提需求</span></div>'; }
+    if(!m||m.spect||!m.alive){
+      var participant=S.players.filter(function(p){return p.alive&&!p.spect;})[0];
+      var watching=m&&m.spect?(S.config.format==='solo'?'当前是 @'+(participant?participant.name:'主持人')+' 的单人演练，你正在观战。':'本局已开始，你中途加入，下一局才能参与。'):'你已被优化，本局可以继续观战。';
+      h='<div class="barRow"><span class="note">'+esc(watching)+(m&&m.isHost?' 点顶部「返回筹备」可以重新开局。':' 等待主持人开启新一轮。')+'</span></div>';
+    }
     else if(m.submitted){
       var sk=S.meta.mySkills.filter(function(x){return x.key===m.submitted.skill;})[0];
       h='<div class="barRow"><span class="note">已提交：<b>'+(sk?esc(sk.label):esc(m.submitted.skill))+'</b>'
         +(m.submitted.target?(' → '+esc(targetName(m.submitted.target))):'')+(m.submitted.raw?('（「'+esc(m.submitted.raw)+'」）'):'')+'，等待其他同事…</span>'
         +'<button data-act="unsubmit">撤回</button></div>';
-    } else if(c_()==='card'){
+    } else if(c_()==='card'||c_()==='hybrid'){
       h='<div class="barRow" style="align-items:flex-start"><div class="skillGrid">'+m.tools.map(skillBtnHTML).join('')+'</div></div>'
         +'<div class="barRow">'+targetSelHTML()+'<button class="primary" data-act="submit">提交评审</button>'
         +(m.ultReady?'<button class="skillBtn ult" data-act="ult" style="flex-direction:row;padding:5px 12px">🚀 准点下班</button>':'<span class="note">摸鱼值 '+m.slack+'/'+m.maxSlack+'，集满可解锁</span>')
-        +'<span class="note" style="margin-left:auto">本轮需 '+S.ready.alive+' 人全部提交</span></div>';
+        +'<span class="note" style="margin-left:auto">'+(S.config.format==='solo'?'选模板 → 选择甲方 → 提交评审，即可推进':'本轮需 '+S.ready.alive+' 人全部提交')+'</span></div>';
+      if(c_()==='hybrid') h+=textInputHTML();
     } else {
       h=textInputHTML()+'<div class="barRow">'
         +(m.ultReady?'<button class="skillBtn ult" data-act="ult" style="flex-direction:row;padding:5px 12px">🚀 准点下班</button>':'<span class="note">摸鱼值 '+m.slack+'/'+m.maxSlack+'（说「摸鱼」可以攒）</span>')
         +'<span class="note" style="margin-left:auto">本轮需 '+S.ready.alive+' 人全部提交</span></div>';
     }
   }
-  h+='<div class="barRow" style="border-top:1px dashed var(--line);padding-top:7px"><span class="note">群消息</span>'
+  h+='<div class="barRow" style="border-top:1px dashed var(--line);padding-top:7px"><span class="note">群消息</span><span id="turnCountdown" class="note"></span>'
     +'<div class="inpWrap"><input id="chatInput" maxlength="200" placeholder="在群里说点什么…"><button data-act="chat">发送</button></div></div>';
   $('#actionBar').innerHTML=h;
   // 重渲染会把输入框清空，这里把用户正在写的草稿还回去
   var si=$('#sayInput'); if(si){ if(draftSay) si.value=draftSay; if(si.value) doParse(); }
+  var ci=$('#chatInput'); if(ci) ci.value=draftChat;
+  updateCountdown();
 }
+function updateCountdown(){ var el=$('#turnCountdown'); if(el) el.textContent=S&&S.deadline?'提交窗口剩余 '+Math.max(0,Math.ceil((S.deadline-Date.now())/1000))+' 秒':''; }
+setInterval(updateCountdown,1000);
 function targetName(id){
   if(!id) return '';
   if(id==='boss') return S.industry.boss;
@@ -694,7 +729,7 @@ function targetName(id){
 
 function render(){
   if(!S) return;
-  S.modeLabelGo=function(){ var f={pvp:'多人混战',coop:'团队攻坚',solo:'单人演练'}[S.config.format]||''; return S.goal.label+' · '+f; };
+  S.modeLabelGo=function(){ return S.goal.label+' · '+S.format.label; };
   $('#login').hidden=true; $('#app').hidden=false;
   renderHeader(); renderMain(); renderBar();
 }
@@ -711,7 +746,7 @@ function openRules(){
   var originRows=S.meta.origins.map(function(o){ return '<tr><td>'+esc(o.icon+' '+o.label)+'</td><td>'+esc(o.desc)+'</td></tr>'; }).join('');
   var goalRows=S.meta.goals.map(function(g){ return '<tr><td>'+esc(g.icon+' '+g.label)+'</td><td>'+esc(g.rounds+' 轮')+'</td><td>'+esc(g.desc)+'</td></tr>'; }).join('');
   $('#rulesBody').innerHTML='<h3>本局手册 · '+esc(S.industry.icon+' '+S.industry.label)+' · '+esc(S.goal.label)+'</h3>'
-    +'<p>每一轮，每人用一条「需求」指向任意同事；所有人提交齐后进入评审会逐条结算。排期占用满 100% 即被优化出局。'
+    +'<p>'+esc(S.goal.desc)+'。每轮提交一份需求，全部提交后逐条评审。组队时支援本组、向另一组提需求；单人项目指向甲方。排期占用满 100% 即被优化出局。'
     +'此刻你的出手方式是 <b>'+esc((S.meta.inputModes.filter(function(x){return x.key===S.config.inputMode;})[0]||{}).label||'')+'</b>。</p>'
     +'<h4>我当前可用的需求模板（'+(S.meta.mySkills.length)+' 个）</h4>'
     +'<table><tr><th style="width:130px">模板</th><th style="width:230px">原话</th><th>效果</th><th style="width:80px">冷却</th></tr>'+skillRows+'</table>'
@@ -728,7 +763,7 @@ function openRules(){
 }
 
 /* ---------------- 交互 ---------------- */
-function sendChat(){ var el=$('#chatInput'); if(!el) return; var t=el.value.trim(); if(!t) return; el.value=''; act('chat',{text:t}); }
+function sendChat(){ var el=$('#chatInput'); if(!el) return; var t=el.value.trim(); if(!t) return; el.value=''; draftChat=''; act('chat',{text:t}); }
 function sendSay(){
   var el=$('#sayInput'); if(!el) return; var t=el.value.trim(); if(!t) return toast('先说说你要提什么需求');
   act('say',{text:t,source:c_()}).then(function(d){
@@ -776,6 +811,15 @@ document.addEventListener('click',function(e){
   else if(a==='ult') act('ult');
   else if(a==='unsubmit') act('unsubmit');
   else if(a==='start') act('start');
+  else if(a==='solostart') act('soloStart');
+  else if(a==='addbot') act('addBot');
+  else if(a==='fillseats') act('fillSeats');
+  else if(a==='removebot') act('removeBot',{playerId:el.dataset.id});
+  else if(a==='selectroom'){ $('#roomInput').value=el.dataset.id; $('#nameInput').focus(); }
+  else if(a==='refreshrooms') loadRooms();
+  else if(a==='copyinvite'){ navigator.clipboard.writeText(location.origin+S.joinUrl).then(function(){toast('邀请地址已复制');}).catch(function(){toast(location.origin+S.joinUrl);}); }
+  else if(a==='backtolobby') act('backToLobby');
+  else if(a==='leave') act('leave').then(function(d){ if(d&&d.ok){ S=null; logout('已退出房间，可以重新输入花名'); } });
   else if(a==='claimhost') act('claimHost');
   else if(a==='restart') act('restart');
   else if(a==='chat') sendChat();
@@ -790,19 +834,14 @@ function jsonKV(k,v){ var o={}; o[k]=v; return o; }
 document.addEventListener('click',function(e){
   var el=e.target.closest('[data-opt]'); if(!el||el.disabled) return;
   var a=el.dataset.opt, v=el.dataset.value;
-  var map={industry:'industry',goal:'goal',format:'format',inputmode:'inputMode',roleassign:'roleAssign',originmode:'originMode'};
-  if(a==='goal'){
-    var g=S.meta.goals.filter(function(x){ return x.key===v; })[0];
-    // 目标和赛制一起更新，避免先切目标被旧赛制拒绝，赛制选项又尚未解锁。
-    var format=g&&g.kind==='boss'?(S.config.format==='pvp'?'coop':S.config.format):'pvp';
-    act('config',{goal:v,format:format});
-  }
-  else if(map[a]) act('config',jsonKV(map[a],v));
+  var map={industry:'industry',goal:'goal',format:'format',inputmode:'inputMode',roleassign:'roleAssign',originmode:'originMode',difficulty:'difficulty'};
+  if(map[a]) act('config',jsonKV(map[a],v));
   else if(a==='pickrole') act('pickrole',{role:v});
 });
 
 document.addEventListener('input',function(e){
   if(e.target&&e.target.id==='sayInput') doParse();
+  if(e.target&&e.target.id==='chatInput') draftChat=e.target.value;
 });
 
 $('#skinSel').addEventListener('change',function(){ skin=this.value; localStorage.setItem('og_skin',skin); render(); });
@@ -814,20 +853,32 @@ document.addEventListener('keydown',function(e){
 });
 document.addEventListener('change',function(e){
   if(e.target&&e.target.id==='groupInput') act('config',{group:e.target.value.trim()});
+  if(e.target&&e.target.id==='targetSel') picked.target=e.target.value;
+  if(e.target&&e.target.dataset.config){
+    var key=e.target.dataset.config, value=e.target.value, payload=jsonKV(key,value);
+    if(key==='stages') payload.startStage=Math.min(S.config.startStage,Number(value));
+    if(key==='startStage') payload.stages=Math.max(S.config.stages,Number(value));
+    act('config',payload);
+  }
+  if(e.target&&e.target.dataset.teamPlayer&&e.target.value) act('setTeam',{playerId:e.target.dataset.teamPlayer,team:e.target.value});
 });
 
 $('#joinBtn').addEventListener('click',async function(){
+  if(location.protocol==='file:') return toast('请通过 http://localhost:7777 进入，不能直接打开 HTML 文件');
   var name=$('#nameInput').value.trim(); if(!name) return toast('请输入花名或姓名');
   try{
-    var r=await fetch('/api/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name})});
-    var d=await r.json(); if(!d.ok) return toast('加入失败');
-    me={id:d.id,secret:d.secret}; sessionStorage.setItem('og_me',JSON.stringify(me));
+    var roomId=$('#roomInput').value.trim();
+    var r=await fetch(roomId?'/api/join':'/api/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,roomId:roomId})});
+    var d=await r.json(); if(!d.ok) return toast(d.error||'加入失败');
+    me={id:d.id,secret:d.secret,roomId:d.state.roomId}; sessionStorage.setItem('og_me',JSON.stringify(me));
+    history.replaceState(null,'',d.state.joinUrl);
     S=d.state; $('#login').hidden=true; $('#app').hidden=false; render(); connect();
   }catch(e){ toast('无法连接服务，请确认地址是否正确'); }
 });
 $('#nameInput').addEventListener('keydown',function(e){ if(e.key==='Enter') $('#joinBtn').click(); });
 
 if(me){ boot(); } else { $('#login').hidden=false; $('#app').hidden=true; }
+loadRooms();
 </script>
 </body>
 </html>

@@ -389,6 +389,21 @@ const INPUT_MODES = [
   { key: 'card', label: '卡牌模式', icon: '🃏', hint: '点需求模板选人，最直观' },
   { key: 'keyword', label: '关键词模式', icon: '🔖', hint: '打关键词，系统帮你匹配需求模板' },
   { key: 'free', label: '自由对话模式', icon: '💬', hint: '像聊天一样说人话，系统理解你的意图' },
+  { key: 'hybrid', label: '混合协作', icon: '⌨️', hint: '需求模板和普通对话同时可用，每次任选一种' },
+];
+
+const FORMATS = [
+  { key: 'solo', label: '个人演练', icon: '🎯', hint: '单人逐关完成项目，选择难度与关数' },
+  { key: 'pvp', label: '全员竞逐', icon: '👥', hint: '大逃杀或个人目标竞赛，至少两人' },
+  { key: 'duel', label: '双人对齐 · 1v1', icon: '↔️', hint: '两人独立竞争，可用虚拟同事补位' },
+  { key: 'team', label: '小组竞标 · 3v3', icon: '🧩', hint: '红蓝两组竞争，团队累计目标进度' },
+  { key: 'coop', label: '联合攻坚', icon: '🤝', hint: '全组共同完成目标，互相支援' },
+];
+const DIFFICULTIES = [
+  { key: 'easy', label: '轻松', hp: 0.7, attack: 0.65, hint: '需求较少，压力较小，适合熟悉操作' },
+  { key: 'normal', label: '标准', hp: 1, attack: 1, hint: '标准需求与压力，兼顾推进和恢复' },
+  { key: 'hard', label: '进阶', hp: 1.25, attack: 1.3, hint: '更多需求，更高压力，需要规划冷却' },
+  { key: 'expert', label: '挑战', hp: 1.5, attack: 1.6, hint: '高压项目，留意甲方点名与持续负担' },
 ];
 
 const ROLE_ASSIGN = [
@@ -414,5 +429,5 @@ module.exports = {
   BASE_SKILLS, ULT_SKILL, ROLE_SKILLS, INDUSTRY_SKILLS,
   ROLES, ORIGINS, INDUSTRIES, GOALS, OKR_OBJECTIVES,
   COMMON_EVENTS, BOSS_EVENTS, SOLO_EVENTS, BOSS_QUOTES,
-  INPUT_MODES, ROLE_ASSIGN, ORIGIN_MODES, CHAT_PRESETS,
+  INPUT_MODES, ROLE_ASSIGN, ORIGIN_MODES, CHAT_PRESETS, FORMATS, DIFFICULTIES,
 };

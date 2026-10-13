@@ -34,7 +34,17 @@ On Windows, start.cmd is also available. Adjust its Node executable paths if the
 3. The host starts the project; players use skills, chat and boards during each round.
 4. Reviews and peer voting advance the game until an objective or end condition is reached; a new session can then be prepared.
 
-Solo practice is supported. Room state lives in process memory and is lost when the server restarts. The current implementation runs a single shared room.
+Entering a nickname with an empty room code creates an independent room. Share its invitation URL or code to invite colleagues. Members, configuration, chat and gameplay are isolated between rooms. State lives in process memory and is lost when the server restarts.
+
+## Mix and match
+
+Choose a format and objective independently; all other settings have defaults. Formats include solo campaigns, free-for-all survival, 1v1, teams from 1v1 to 5v5 (default 3v3), and cooperative projects. Objectives include survival, KPI, OKR, a fixed deadline window, and clearing project requirements. Team KPI/OKR use cumulative progress; project competitions compare delivery contributions.
+
+Solo campaigns have four difficulty levels, 1–10 stages and a selectable starting stage. KPI/OKR require 100 progress per stage; deadline stages last 10 rounds and require 60 delivered. Choose cards, keywords, natural language or hybrid input. Natural language uses local parsing by default, with optional server-configured LLM support and local fallback.
+
+Hosts can add virtual colleagues or fill empty seats. Bots act automatically. Teams disable friendly attacks by default and allow support for allies. Optional submission windows of 30, 60 or 120 seconds automatically defend missing submissions. Chat, enterprise workspace, board and meeting views keep a workplace appearance.
+
+Run `node modes-check.js` and `node recovery-check.js` to test independent rooms, formats and recovery on isolated servers.
 
 ## Configuration
 

@@ -51,12 +51,12 @@ const FORBIDDEN = ['攻击', '血量', '伤害', '技能', '敌人', '生命值'
   check('群名称输入框可用', !!d.querySelector('#groupInput') && d.querySelector('#groupInput').value.length > 0, d.querySelector('#groupInput') && d.querySelector('#groupInput').value);
   const optCount = d.querySelectorAll('.optCard').length;
   check('向导选项卡数量充足', optCount >= 18, optCount);
-  ['行业', '本季度目标', '赛制', '出手方式', '职位分配', '出身'].forEach(lbl => {
+  ['行业', '本季度目标', '协作安排', '工作方式', '职位分配', '出身'].forEach(lbl => {
     check('向导包含分组：' + lbl, d.querySelector('#main').textContent.indexOf(lbl) >= 0);
   });
   check('行业选项 6 个', d.querySelectorAll('.optCard[data-opt="industry"]').length === 6, d.querySelectorAll('.optCard[data-opt="industry"]').length);
   check('目标选项 5 个', d.querySelectorAll('.optCard[data-opt="goal"]').length === 5, d.querySelectorAll('.optCard[data-opt="goal"]').length);
-  check('出手方式 3 个', d.querySelectorAll('.optCard[data-opt="inputmode"]').length === 3, d.querySelectorAll('.optCard[data-opt="inputmode"]').length);
+  check('出手方式 4 个', d.querySelectorAll('.optCard[data-opt="inputmode"]').length === 4, d.querySelectorAll('.optCard[data-opt="inputmode"]').length);
   check('默认选中行业高亮', !!d.querySelector('.optCard[data-opt="industry"].sel'));
   check('身份卡展示职位与被动', d.querySelector('#main').textContent.indexOf('被动') >= 0);
   check('加入地址已展示', d.querySelector('#main').textContent.indexOf('http://') >= 0);
@@ -86,12 +86,12 @@ const FORBIDDEN = ['攻击', '血量', '伤害', '技能', '敌人', '生命值'
   check('切换到 OKR 后赛制被限制为混战', w.S.config.format === 'pvp', w.S.config.format);
 
   /* ---------- 4. 另外两名成员 ---------- */
-  const p2 = await api('/api/join', { name: '李娜' });
-  const p3 = await api('/api/join', { name: '王芳' });
+  const p2 = await api('/api/join', { name: '李娜', roomId: w.S.roomId });
+  const p3 = await api('/api/join', { name: '王芳', roomId: w.S.roomId });
   const CREDS = { 李娜: p2, 王芳: p3 };
   await w.act('state');
   await sleep(250);
-  check('成员出现在侧栏', d.querySelectorAll('.mLite').length >= 3, d.querySelectorAll('.mLite').length);
+  check('成员出现在侧栏', d.querySelectorAll('.wizSide .mRow').length >= 3, d.querySelectorAll('.wizSide .mRow').length);
   check('随机分配的职位有徽标', d.querySelectorAll('.bdg.role').length >= 3, d.querySelectorAll('.bdg.role').length);
   check('随机分配的出身有徽标', d.querySelectorAll('.bdg.origin').length >= 3, d.querySelectorAll('.bdg.origin').length);
   const roleLabels = [].slice.call(d.querySelectorAll('.bdg.role')).map(e => e.textContent.trim());

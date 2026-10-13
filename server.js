@@ -32,6 +32,7 @@ const IND_BY_KEY = {}; D.INDUSTRIES.forEach(i => { IND_BY_KEY[i.key] = i; });
 const OBJ_BY_KEY = {}; D.OKR_OBJECTIVES.forEach(o => { OBJ_BY_KEY[o.key] = o; });
 
 /* ---------------------------------------------------------------- 房间状态 */
+function createRoom(roomId) {
 function defaultConfig(industry) {
   const ind = IND_BY_KEY[industry] || D.INDUSTRIES[0];
   return {
@@ -42,10 +43,17 @@ function defaultConfig(industry) {
     inputMode: 'card',
     roleAssign: 'random',
     originMode: 'random',
+    difficulty: 'normal',
+    stages: 3,
+    startStage: 1,
+    teamSize: 3,
+    turnSeconds: 0,
+    friendlyFire: 'off',
   };
 }
 
 const room = {
+  createdAt: Date.now(),
   config: defaultConfig('internet'),
   phase: 'lobby',
   round: 0,
@@ -63,6 +71,12 @@ const room = {
   globalShieldPct: 0,
   revealFeed: [],
   started: false,
+  stage: 1,
+  stageRound: 0,
+  deadline: 0,
+  turnTimer: null,
+  botTimer: null,
+  gameVersion: 0,
 };
 
 /* ---------------------------------------------------------------- 工具 */
@@ -77,9 +91,25 @@ function goal() { return GOAL_BY_KEY[room.config.goal] || D.GOALS[0]; }
 function ind() { return IND_BY_KEY[room.config.industry] || D.INDUSTRIES[0]; }
 function isSolo() { return room.config.format === 'solo'; }
 function isCoop() { return room.config.format === 'coop'; }
-function hasBoss() { return goal().kind === 'boss'; }
+function isTeam() { return room.config.format === 'team'; }
+function difficulty() { return D.DIFFICULTIES.find(d => d.key === cfg().difficulty) || D.DIFFICULTIES[1]; }
+function formatMeta() {
+  const format = D.FORMATS.find(f => f.key === cfg().format) || D.FORMATS[1];
+  return isTeam() ? { ...format, label: `小组竞标 · ${cfg().teamSize}v${cfg().teamSize}` } : format;
+}
+function objectiveText() {
+  const key = goal().key;
+  if (key === 'deadline') return isSolo() ? '每关 10 轮交付窗口，交付至少 60 才能进入下一关' : isCoop() ? '10 轮内全组累计交付达到 100，通过联合评审' : '固定 10 轮交付窗口，到期按个人或小组交付量评定';
+  if (key === 'kpi' || key === 'okr') return `${isSolo() ? '每关个人' : isTeam() || isCoop() ? '全组累计' : '个人'}${key === 'kpi' ? ' KPI' : ' O 完成度'}达到 100${isSolo() ? '，进入下一项目' : '，晋升答辩通过'}`;
+  if (isSolo()) return '逐关完成项目需求池，保住带宽，完成所选关卡';
+  if (isCoop()) return '共同完成项目需求池；有人被优化则联合攻坚失败';
+  return key === 'battle' ? '最后存活的成员或小组晋升；季度到期比较剩余带宽' : '共同完成需求池，按个人或小组交付贡献评定';
+}
+function hasBoss() { return goal().kind === 'boss' || isSolo() || isCoop(); }
+function allies(p, t) { return isCoop() || (isTeam() && p.team && p.team === t.team); }
+function enemies(p) { return actives().filter(t => t !== p && (!allies(p, t) || cfg().friendlyFire === 'on')); }
 /** 单人演练需要更长的回合窗口才能连过三关 */
-function roundsMax() { const g = goal(); return (isSolo() && g.roundsSolo) ? g.roundsSolo : g.rounds; }
+function roundsMax() { const g = goal(); return isSolo() ? (cfg().stages - cfg().startStage + 1) * (g.key === 'deadline' ? g.rounds : 10) : g.rounds; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 function pushLog(kind, text, name) {
@@ -158,6 +188,68 @@ function scoreLabel() {
   if (g.key === 'deadline') return '交付量';
   return '';
 }
+function teamViews() {
+  if (!isTeam()) return [];
+  return ['red', 'blue'].map(key => {
+    const members = seated().filter(p => p.team === key);
+    return { key, name: key === 'red' ? '项目一组' : '项目二组', count: members.length,
+      alive: members.filter(p => p.alive).length,
+      score: members.reduce((sum, p) => sum + scoreOf(p), 0),
+      work: members.reduce((sum, p) => sum + (p.projectWork || 0), 0),
+      bandwidth: members.filter(p => p.alive).reduce((sum, p) => sum + p.bw, 0) };
+  });
+}
+function teamWinner(team, reason) { endGame({ team: true, name: team.name }, reason); }
+function clearTurn() {
+  clearTimeout(room.turnTimer); clearTimeout(room.botTimer);
+  room.turnTimer = null; room.botTimer = null; room.deadline = 0;
+}
+function botMove(p) {
+  const usable = skillsFor(p).filter(s => !p.cds[s.key]);
+  const foes = enemies(p);
+  const choices = usable.filter(s => !s.needTarget || (room.boss && BOSS_OK_KINDS.includes(s.kind)) || foes.length);
+  const heals = choices.filter(s => ['heal', 'healAll', 'ultimate'].includes(s.kind));
+  const attacks = choices.filter(s => ['attack', 'drain', 'dot', 'kpi'].includes(s.kind));
+  const skill = pick(p.bw < p.maxBw * 0.45 && heals.length ? heals : (attacks.length ? attacks : choices));
+  if (!skill) return;
+  const target = skill.needTarget ? (room.boss && BOSS_OK_KINDS.includes(skill.kind) ? BOSS : (pick(foes) || {}).id) : null;
+  const err = submit(p, skill.key, target, 'assistant', '');
+  if (err) {
+    const fallback = choices.find(s => !s.needTarget);
+    if (fallback) submit(p, fallback.key, null, 'assistant', '');
+  }
+}
+function armTurn() {
+  clearTurn();
+  room.botTimer = setTimeout(() => {
+    if (room.phase !== 'select') return;
+    actives().filter(p => p.bot && !p.submitted).forEach(botMove);
+    broadcast(); tryResolve();
+  }, 500);
+  if (cfg().turnSeconds) {
+    room.deadline = Date.now() + cfg().turnSeconds * 1000;
+    room.turnTimer = setTimeout(() => {
+      if (room.phase !== 'select') return;
+      actives().filter(p => !p.submitted).forEach(p => {
+        // 自动进入防守，不替玩家决定攻击对象，也不额外消费冷却。
+        p.submitted = { skill: 'defer', target: null, source: 'timeout', raw: '' };
+        pushLog('sys', `@${p.name} 未在窗口内提交，本轮自动排期后置`);
+      });
+      tryResolve();
+    }, cfg().turnSeconds * 1000);
+  }
+}
+function advanceStage(reason) {
+  if (room.stage >= cfg().stages) {
+    endGame(actives()[0] || null, `${reason}，完成第 ${cfg().startStage} 至 ${cfg().stages} 关，晋升答辩通过`);
+    return true;
+  }
+  room.stage++; room.stageRound = 0;
+  room.boss = makeBoss(room.stage, 1);
+  actives().forEach(p => { p.bw = p.maxBw; p.dots = []; p.cds = {}; p.kpi = 0; p.oProg = 0; p.delivered = 0; });
+  pushLog('sys', `${reason}，休整后进入第 ${room.stage}/${cfg().stages} 关，带宽与冷却恢复`);
+  return false;
+}
 function gainScore(p, n, reason) {
   const g = goal();
   if (g.key === 'kpi') { p.kpi = Math.max(0, p.kpi + n); }
@@ -187,7 +279,7 @@ function lanUrls() {
 }
 
 function skillMeta(s) {
-  return { key: s.key, label: s.label, tag: s.tag, quote: s.quote, effect: s.effect, kind: s.kind, cd: s.cd || 0, needTarget: !!s.needTarget, owner: s.owner || '', ultimate: !!s.ultimate, bossOk: BOSS_OK_KINDS.indexOf(s.kind) >= 0 };
+  return { key: s.key, label: s.label, tag: s.tag, quote: s.quote, effect: s.effect, kind: s.kind, cd: s.cd || 0, needTarget: !!s.needTarget, owner: s.owner || '', ultimate: !!s.ultimate, bossOk: BOSS_OK_KINDS.indexOf(s.kind) >= 0 || (isSolo() && s.kind === 'redirect') };
 }
 
 function okrInfo() {
@@ -204,12 +296,17 @@ function viewFor(viewer) {
   const g = goal(), i = ind();
   const mySkills = viewer && !viewer.spect ? skillsFor(viewer) : [];
   return {
+    roomId,
+    joinUrl: `/?room=${roomId}`,
+    format: formatMeta(),
+    challenge: { stage: room.stage, stages: cfg().stages, stageRound: room.stageRound, difficulty: difficulty().label },
+    deadline: room.deadline,
     phase: room.phase,
     round: room.round,
     started: room.started,
     config: Object.assign({}, room.config, { group: room.config.group }),
     industry: { key: i.key, label: i.label, icon: i.icon, color: i.color, group: i.group, target: i.target, boss: i.boss },
-    goal: { key: g.key, label: g.label, icon: g.icon, kind: g.kind, rounds: roundsMax(), desc: g.desc, target: g.target || 0, win: g.win },
+    goal: { key: g.key, label: g.label, icon: g.icon, kind: g.kind, rounds: roundsMax(), desc: objectiveText(), target: g.target || 0, win: objectiveText() },
     scoreLabel: scoreLabel(),
     meta: {
       roles: D.ROLES.map(r => ({ key: r.key, label: r.label, icon: r.icon, color: r.color, blurb: r.blurb, passive: r.passive.text, skills: r.skills.map(k => SKILL_BY_KEY[k] ? SKILL_BY_KEY[k].label : k) })),
@@ -221,6 +318,8 @@ function viewFor(viewer) {
       originModes: D.ORIGIN_MODES,
       chatPresets: D.CHAT_PRESETS,
       allSkills: ALL_SKILLS.map(skillMeta),
+      formats: D.FORMATS,
+      difficulties: D.DIFFICULTIES,
       mySkills: mySkills.map(skillMeta),
       maxSlack: MAX_SLACK,
       llm: !!process.env.LLM_API_KEY,
@@ -232,7 +331,7 @@ function viewFor(viewer) {
       telegraph: room.boss.telegraph ? { name: (byId(room.boss.telegraph.targetId) || {}).name || '—' } : null,
     } : null,
     players: room.players.map(p => ({
-      id: p.id, name: p.name, isHost: p.isHost, spect: p.spect, alive: p.alive,
+      id: p.id, name: p.name, isHost: p.isHost, spect: p.spect, alive: p.alive, bot: !!p.bot, team: p.team || '', projectWork: p.projectWork || 0,
       role: p.role, roleLabel: p.role ? (ROLE_BY_KEY[p.role] || {}).label : '', roleIcon: p.role ? (ROLE_BY_KEY[p.role] || {}).icon : '',
       origin: p.origin, originLabel: p.origin ? (ORIGIN_BY_KEY[p.origin] || {}).label : '', originIcon: p.origin ? (ORIGIN_BY_KEY[p.origin] || {}).icon : '',
       tier: tierOf(p), tierText: TIER_TEXT[tierOf(p)],
@@ -244,7 +343,7 @@ function viewFor(viewer) {
       oKey: p.oKey,
     })),
     me: viewer ? {
-      id: viewer.id, name: viewer.name, isHost: viewer.isHost, spect: viewer.spect, alive: viewer.alive,
+      id: viewer.id, name: viewer.name, isHost: viewer.isHost, spect: viewer.spect, alive: viewer.alive, team: viewer.team || '',
       role: viewer.role, origin: viewer.origin, originOn: cfg().originMode !== 'off',
       roleLabel: viewer.role ? (ROLE_BY_KEY[viewer.role] || {}).label : '',
       roleIcon: viewer.role ? (ROLE_BY_KEY[viewer.role] || {}).icon : '',
@@ -276,6 +375,7 @@ function viewFor(viewer) {
     reason: room.phase === 'over' ? room.winnerReason : '',
     okr: okrInfo(),
     ready: { alive: actives().length, submitted: actives().filter(p => p.submitted).length, total: seated().length, voted: Object.keys(room.votes).length },
+    teams: teamViews(),
   };
 }
 
@@ -285,32 +385,27 @@ const clients = new Map();
  * 幽灵成员（页面关掉但还留在房间里的人）会霸占群主身份，导致后来的人永远开不了局。
  * 这里以「SSE 长连接在」或「最近有过请求」作为在线依据，定期清理并在群主离席时自动交接。 */
 const LIVE_MS = Number(process.env.LIVE_MS || 40000);
-function isLive(p) { return !!p && (clients.has(p.id) || (Date.now() - (p.lastSeen || 0) < LIVE_MS)); }
+function isLive(p) { return !!p && (p.bot || clients.has(p.id) || (Date.now() - (p.lastSeen || 0) < LIVE_MS)); }
 function touch(p) { if (p) p.lastSeen = Date.now(); }
 function ensureHost() {
   if (!room.players.length) return false;
   const host = room.players.filter(p => p.isHost)[0];
   if (host && isLive(host)) return false;
   // 没人在线时先不交接，等下一个进来的人自然成为群主
-  const cand = room.players.filter(p => isLive(p))[0];
+  const cand = room.players.filter(p => !p.bot && isLive(p))[0];
   if (!cand || cand === host) return false;
   room.players.forEach(p => { p.isHost = (p === cand); });
   pushLog('sys', host ? `群主 @${host.name} 已离开，群主身份移交给 @${cand.name}` : `@${cand.name} 成为群主`);
   return true;
 }
 function reapGhosts() {
-  if (room.phase !== 'lobby') { if (ensureHost()) broadcast(); return; }
   const gone = room.players.filter(p => !isLive(p));
   if (gone.length) {
-    room.players = room.players.filter(p => !gone.includes(p));
-    gone.forEach(p => { clients.delete(p.id); delete room.votes[p.id]; });
-    pushLog('sys', `清理 ${gone.length} 位已离开的成员：${gone.map(p => p.name).join('、')}`);
-    if (!room.players.length) { resetToLobby(); return; }
+    removePlayers(gone, '连接已超时，退出本局');
+    return;
   }
-  ensureHost();
-  if (gone.length) broadcast();
+  if (ensureHost()) broadcast();
 }
-setInterval(reapGhosts, 3000);
 
 function broadcast() {
   clients.forEach((res, pid) => {
@@ -328,13 +423,13 @@ function applyEventExpr(expr) {
     const list = actives();
     if (!list.length) continue;
     switch (rawKey) {
-      case 'allBw': list.forEach(p => { p.bw -= v; }); break;
+      case 'allBw': list.forEach(p => { p.bw = Math.min(mods(p).maxBw, p.bw + v); }); break;
       case 'allHeal': list.forEach(p => { p.bw = Math.min(mods(p).maxBw, p.bw + v); }); break;
       case 'allKpi': if (goal().key !== 'battle') list.forEach(p => gainScore(p, v)); break;
       case 'allCharge': list.forEach(p => { p.slack = Math.min(MAX_SLACK, p.slack + v); }); break;
       case 'topBw': {
         const t = list.slice().sort((a, b) => a.bw - b.bw)[0];
-        if (t) { t.bw -= v; room.eventExtra = t.name; }
+        if (t) { t.bw += v; room.eventExtra = t.name; }
         break;
       }
       case 'topCost': {
@@ -363,6 +458,7 @@ function drawEvent() {
 
 /* ---------------------------------------------------------------- 死亡与胜负 */
 function endGame(winner, reason) {
+  clearTurn();
   room.phase = 'over';
   room.winner = winner;
   room.winnerReason = reason;
@@ -378,6 +474,12 @@ function maybeEndAfterDeaths() {
   const list = actives();
   if (isCoop()) { endGame(null, '团队中有人被优化，攻坚失败'); return true; }
   if (isSolo()) { if (!list.length) { endGame(null, '演练失败：带宽耗尽被优化'); return true; } return false; }
+  if (isTeam()) {
+    const liveTeams = teamViews().filter(t => t.alive);
+    if (liveTeams.length === 1) { teamWinner(liveTeams[0], '另一组已全部进入观察期，项目组晋升'); return true; }
+    if (!liveTeams.length) { endGame(null, '两组均被优化'); return true; }
+    return false;
+  }
   if (list.length === 1) { endGame(list[0], '最后存活，晋升答辩通过'); return true; }
   if (list.length === 0) { endGame(null, '全员被优化，本季度无人通过'); return true; }
   return false;
@@ -399,8 +501,15 @@ function checkDeaths() {
 function startGame() {
   const c = cfg();
   if (!GOAL_BY_KEY[c.goal]) return '未知目标';
-  if (goal().kind === 'boss' && c.format === 'pvp') return '攻坚类目标需要选择团队或单人赛制';
-  if (goal().kind !== 'boss' && c.format !== 'pvp') return '该目标只支持多人混战赛制';
+  if (c.format === 'duel' && room.players.length !== 2) return '双人对齐需要恰好 2 位成员';
+  if (isTeam()) {
+    const size = Number(c.teamSize);
+    if (room.players.length !== size * 2) return `小组竞标需要 ${size * 2} 位成员（${size}v${size}）`;
+    room.players.filter(p => !['red', 'blue'].includes(p.team)).forEach(p => {
+      p.team = room.players.filter(x => x.team === 'red').length < size ? 'red' : 'blue';
+    });
+    if (['red', 'blue'].some(key => room.players.filter(p => p.team === key).length !== size)) return `两组各需要 ${size} 位成员，请调整分组`;
+  }
   // 角色去重（随机分配时可能撞车）
   if (c.roleAssign === 'random') {
     const seen = {};
@@ -409,12 +518,14 @@ function startGame() {
       seen[p.role] = 1;
     });
   }
-  const missing = room.players.filter(p => !p.spect && !p.role);
+  const missing = room.players.filter(p => !p.spect && !p.role && (!isSolo() || p.isHost));
   if (missing.length) return `还有成员没有认领职位：${missing.map(p => p.name).join('、')}`;
 
   room.round = 0; room.winner = null; room.winnerReason = ''; room.revealed = []; room.log = [];
   room.event = null; room.eventExtra = null; room.phase = 'lobby'; room.votes = {};
   room.globalShieldPct = 0; room.revealFeed = [];
+  clearTurn(); room.stage = c.startStage; room.stageRound = 0;
+  room.gameVersion++;
   clearTimeout(room.reviewTimer); clearTimeout(room.voteTimer);
   room.reviewTimer = null; room.voteTimer = null;
 
@@ -426,25 +537,27 @@ function startGame() {
     p.alive = true; p.bw = m.maxBw; p.kpi = 0; p.oProg = 0; p.delivered = 0;
     p.oKey = goal().key === 'okr' ? oKeys[idx % oKeys.length] : null;
     p.slack = 0; p.cds = {}; p.dots = [];
+    p.projectWork = 0;
     p.submitted = null; p.shield = false; p.reflect = false; p.redirectTo = null;
     p.fragile = 0; p.noHeal = 0; p.buffPct = 0; p.protect = [];
     p.disabled = false; p.usedFirstHit = false; p.ultShield = false;
     p.stats = { dealt: 0, taken: 0 };
   });
-  room.boss = hasBoss() ? makeBoss(1, actives().length) : null;
+  room.boss = hasBoss() ? makeBoss(room.stage, actives().length) : null;
   room.started = true;
-  pushLog('sys', `【立项】${ind().label} · ${goal().label}（${goal().desc}）`);
-  pushLog('sys', `赛制：${c.format === 'pvp' ? '多人混战' : (c.format === 'coop' ? '团队攻坚' : '单人演练')}｜出手方式：${(D.INPUT_MODES.find(x => x.key === c.inputMode) || {}).label}｜职位：${(D.ROLE_ASSIGN.find(x => x.key === c.roleAssign) || {}).label}`);
+  pushLog('sys', `【立项】${ind().label} · ${goal().label}（${objectiveText()}）`);
+  pushLog('sys', `赛制：${formatMeta().label}｜出手方式：${(D.INPUT_MODES.find(x => x.key === c.inputMode) || {}).label}｜职位：${(D.ROLE_ASSIGN.find(x => x.key === c.roleAssign) || {}).label}`);
   const spects = room.players.filter(p => p.spect);
   if (spects.length) pushLog('sys', `演练模式开启，${spects.map(p => '@' + p.name).join('、')} 进入观察期`);
   startRound();
 }
 
 function makeBoss(level, count) {
-  if (isCoop()) { const hp = 40 * count + 40; return { hp, maxHp: hp, level: 1, atkBase: 7, round: 0, dots: [], telegraph: null }; }
+  const diff = difficulty();
+  if (!isSolo()) { const hp = Math.round((40 * count + 40) * diff.hp); return { hp, maxHp: hp, level: 1, atkBase: Math.round(7 * diff.attack), round: 0, dots: [], telegraph: null }; }
   // 单人演练：三关递进，压力来自轮次累积而非单点爆发
-  const hp = 80 + 20 * (level - 1);
-  return { hp, maxHp: hp, level, atkBase: 6 + 2 * (level - 1), round: 0, dots: [], telegraph: null };
+  const hp = Math.round((80 + 20 * (level - 1)) * diff.hp);
+  return { hp, maxHp: hp, level, atkBase: Math.round((6 + 2 * (level - 1)) * diff.attack), round: 0, dots: [], telegraph: null };
 }
 function bossDmgFor(base) { return Math.round(base * (isSolo() ? (1 + 0.25 * (room.boss.level - 1)) : 1)); }
 function quoteBoss(round) {
@@ -455,6 +568,7 @@ function quoteBoss(round) {
 function startRound() {
   if (room.phase === 'over') return;
   room.round++;
+  room.stageRound++;
   room.revealed = []; room.eventExtra = null; room.votes = {}; room.globalShieldPct = 0;
   const g = goal();
 
@@ -480,7 +594,7 @@ function startRound() {
   actives().forEach(p => {
     const m = mods(p);
     if (m.pressure) {
-      const t = actives().filter(x => x.id !== p.id).sort((a, b) => a.bw - b.bw)[0];
+      const t = enemies(p).sort((a, b) => a.bw - b.bw)[0];
       if (t) { t.bw -= m.pressure; pushLog('sys', `@${p.name}（财务）例行压降预算，@${t.name} 带宽 -${m.pressure}`); }
     }
     if (m.autoReveal) {
@@ -504,14 +618,16 @@ function startRound() {
   if (checkDeaths()) return;
 
   // 周报互评：每 3 轮一次，人多时开启
-  if (g.kind === 'pvp' && room.round % 3 === 0 && actives().length >= 3) {
+  if (!isSolo() && !isCoop() && g.kind === 'pvp' && room.round % 3 === 0 && actives().length >= 3) {
     room.phase = 'vote';
     pushLog('sys', '【周报互评】本轮开始前，全组匿名互评：谁最该被优化？');
     room.voteTimer = setTimeout(() => { if (room.phase === 'vote') resolveVote(); }, VOTE_MS);
+    actives().filter(p => p.bot).forEach(p => { room.votes[p.id] = (pick(enemies(p)) || {}).id || 'abstain'; });
     broadcast();
     return;
   }
   room.phase = 'select';
+  armTurn();
   broadcast();
 }
 
@@ -540,6 +656,7 @@ function resolveVote() {
   }
   if (checkDeaths()) return;
   room.phase = 'select';
+  armTurn();
   broadcast();
 }
 
@@ -615,6 +732,9 @@ function playerAttack(att, t, dmg, label) {
 
 function bossDamage(att, dmg, label) {
   let v = Math.round(dmg * mods(att).dealMult * mods(att).attackMult);
+  const delivered = Math.min(room.boss.hp, v);
+  att.projectWork = (att.projectWork || 0) + delivered;
+  if (isSolo() && ['kpi', 'okr', 'deadline'].includes(goal().key)) gainScore(att, Math.round(delivered * 0.5));
   room.boss.hp = Math.max(0, room.boss.hp - v);
   pushLog('sys', `@${att.name} 用「${label}」推进项目：剩余需求 -${v}（还剩 ${Math.round(room.boss.hp)}）`);
   return { text: `项目推进 ${v}，剩余需求 ${Math.round(room.boss.hp)}`, dealt: v };
@@ -626,7 +746,7 @@ function applySkill(entry) {
   const bossAllowed = hasBoss() && (targetId === BOSS || (!s.needTarget && s.kind !== 'redirect'));
   const toBoss = hasBoss() && targetId === BOSS;
   const t = toBoss || targetId === 'all' || !targetId ? null : byId(targetId);
-  const others = () => actives().filter(x => x.id !== p.id);
+  const others = () => enemies(p);
 
   switch (s.kind) {
     /* ---- 单点需求 ---- */
@@ -656,7 +776,7 @@ function applySkill(entry) {
     case 'dot': {
       if (toBoss) {
         const d = bossDmgFor(s.dmg);
-        room.boss.dots.push({ dmg: d, dur: s.dur });
+        room.boss.dots.push({ dmg: d, dur: s.dur, srcId: p.id });
         pushLog('sys', `@${p.name} 派人支援项目：未来 ${s.dur} 轮各推进 ${d}`);
         return `支援成立：未来 ${s.dur} 轮各推进 ${d}`;
       }
@@ -723,7 +843,7 @@ function applySkill(entry) {
     case 'healAll': {
       const hm = mods(p).healMult;
       const base = Math.round(s.heal * hm);
-      actives().forEach(x => { x.bw = Math.min(x.maxBw, x.bw + base); });
+      actives().filter(x => !isTeam() || x === p || allies(p, x)).forEach(x => { x.bw = Math.min(x.maxBw, x.bw + base); });
       if (s.selfHeal) p.bw = Math.min(p.maxBw, p.bw + s.selfHeal);
       pushLog('sys', `@${p.name} 使用「${s.label}」：全员 +${base}${s.selfHeal ? `，自己额外 +${s.selfHeal}` : ''}`);
       return `全员 +${base}${s.selfHeal ? `，自己额外 +${s.selfHeal}` : ''}`;
@@ -842,6 +962,7 @@ function labelOf(id) {
 }
 
 function resolveRound() {
+  clearTurn();
   const g = goal();
   room.phase = 'review';
   const entries = [];
@@ -889,7 +1010,7 @@ function resolveRound() {
   });
 
   // 清空临时控制标记
-  room.players.forEach(p => { p.disabled = false; p.buffPct = 0; p.ultShield = false; });
+  room.players.forEach(p => { p.disabled = false; p.buffPct = 0; });
 
   // 甲方落点
   if (room.boss && room.boss.telegraph && room.phase !== 'over') {
@@ -903,11 +1024,17 @@ function resolveRound() {
     room.boss.telegraph = null;
     checkDeaths();
   }
+  room.players.forEach(p => { p.ultShield = false; });
 
   // 甲方持续伤害 & 项目推进 dot
   if (room.boss && room.boss.dots.length && room.phase !== 'over') {
     let total = 0;
-    room.boss.dots.forEach(b => { total += b.dmg; b.dur--; });
+    room.boss.dots.forEach(b => {
+      const contributor = byId(b.srcId);
+      const amount = Math.min(b.dmg, Math.max(0, room.boss.hp - total));
+      if (contributor) contributor.projectWork = (contributor.projectWork || 0) + amount;
+      total += b.dmg; b.dur--;
+    });
     room.boss.dots = room.boss.dots.filter(b => b.dur > 0);
     if (total > 0) { room.boss.hp = Math.max(0, room.boss.hp - total); pushLog('sys', `借调的人力持续支援，项目推进 ${total}（剩余 ${Math.round(room.boss.hp)}）`); }
   }
@@ -949,8 +1076,20 @@ function resolveRound() {
       pushLog('sys', `产出结算：全员 ${scoreLabel()} +${g.passive}${D.ROLES.some(r => r.passive.kpiBonus) ? '（含职位加成）' : ''}`);
     }
     list.forEach(p => { p.stats.taken = 0; });
-    const w = list.find(p => scoreOf(p) >= (g.target || 100));
-    if (w) { endGame(w, `${scoreLabel()} 率先达到 ${g.target}，晋升答辩通过`); return; }
+    if (g.key !== 'deadline') {
+      if (isTeam()) {
+        const team = teamViews().find(t => t.score >= (g.target || 100));
+        if (team) { teamWinner(team, `全组 ${scoreLabel()} 达到 ${g.target}，项目组晋升`); return; }
+      } else if (isCoop()) {
+        if (list.reduce((sum, p) => sum + scoreOf(p), 0) >= (g.target || 100)) { endGame({ team: true, name: '全员' }, `共同 ${scoreLabel()} 达标，联合攻坚完成`); return; }
+      } else {
+        const w = list.find(p => scoreOf(p) >= (g.target || 100));
+        if (w) {
+          if (isSolo()) { if (advanceStage(`${scoreLabel()} 达标`)) return; }
+          else { endGame(w, `${scoreLabel()} 率先达到 ${g.target}，晋升答辩通过`); return; }
+        }
+      }
+    }
   }
 
   // 项目死线：每 3 轮检查进度
@@ -967,18 +1106,43 @@ function resolveRound() {
 
   // 攻坚目标推进
   if (room.boss && room.boss.hp <= 0) {
-    const b = room.boss;
-    if (isCoop()) { endGame({ team: true, name: '全员' }, `${ind().target}全部交付完成，团队绩效 A`); return; }
-    if (b.level >= 3) { endGame(actives()[0] || null, '三个项目全部通关，晋升答辩通过'); return; }
-    room.boss = makeBoss(b.level + 1, 1);
-    actives().forEach(p => { p.bw = p.maxBw; p.dots = []; });
-    pushLog('sys', `项目交付完成！休整后带宽恢复，新项目立项：第 ${room.boss.level} 关（总量 ${room.boss.maxHp}，${ind().boss}火力提升）`);
+    if (isSolo()) {
+      if (g.key === 'resolve' || g.key === 'battle') { if (advanceStage('本关项目交付完成')) return; }
+      else { room.boss = makeBoss(room.stage, 1); pushLog('sys', '本批需求已完成，继续处理新需求以完成本关目标'); }
+    } else if (isCoop()) {
+      if (g.key === 'resolve' || g.key === 'battle') { endGame({ team: true, name: '全员' }, `${ind().target}全部交付完成，团队绩效 A`); return; }
+      room.boss = makeBoss(1, actives().length);
+    } else if (isTeam()) {
+      const ranked = teamViews().sort((a, b) => b.work - a.work);
+      if (ranked[0].work === ranked[1].work) endGame(null, '项目交付完成，两组贡献相同，联合晋升');
+      else teamWinner(ranked[0], '项目交付完成，本组交付贡献最高');
+      return;
+    } else {
+      const list = actives().slice().sort((a, b) => (b.projectWork || 0) - (a.projectWork || 0));
+      endGame(list[0] || null, '项目交付完成，交付贡献最高者晋升'); return;
+    }
+  }
+
+  if (isSolo() && g.key === 'deadline' && room.stageRound >= g.rounds) {
+    if (scoreOf(actives()[0]) < 60) { endGame(null, '本关死线已到，交付不足 60，评审未通过'); return; }
+    if (advanceStage('本关在死线内达到交付要求')) return;
   }
 
   // 轮次耗尽
   if (room.round >= roundsMax()) {
-    if (isCoop()) { const left = Math.max(0, Math.round(room.boss.hp)); endGame(null, `季度结束，${ind().target}仍剩 ${left} 未交付，团队未通过评审`); return; }
+    if (isCoop()) {
+      if (g.key === 'deadline' && actives().reduce((sum, p) => sum + scoreOf(p), 0) >= 100) endGame({ team: true, name: '全员' }, '死线内共同交付达标，联合评审通过');
+      else endGame(null, '季度结束，共同目标尚未达标');
+      return;
+    }
     if (isSolo()) { endGame(null, '演练超时结束，未能通关'); return; }
+    if (isTeam()) {
+      const ranked = teamViews().sort((a, b) => (g.key === 'battle' ? b.bandwidth - a.bandwidth : g.key === 'resolve' ? b.work - a.work : b.score - a.score));
+      const metric = t => g.key === 'battle' ? t.bandwidth : g.key === 'resolve' ? t.work : t.score;
+      if (metric(ranked[0]) === metric(ranked[1])) endGame(null, '两组目标进度相同，本季度平局');
+      else teamWinner(ranked[0], '季度截止，全组目标进度领先');
+      return;
+    }
     const list = actives().slice();
     if (g.key === 'battle') { const best = list.sort((a, b) => b.bw - a.bw)[0] || null; endGame(best, '季度结束，剩余带宽最高'); return; }
     const best = list.sort((a, b) => scoreOf(b) - scoreOf(a))[0] || null;
@@ -1008,7 +1172,7 @@ function submit(p, skillKey, target, source, raw) {
     if (target === BOSS) {
       if (!hasBoss()) return '当前目标下没有接收方';
       if (skill.kind === 'redirect' && !isSolo()) return '甩锅只能指向同事';
-      if (BOSS_OK_KINDS.indexOf(skill.kind) < 0) return `「${skill.label}」用不到${ind().boss}身上，换个接收人`;
+      if (BOSS_OK_KINDS.indexOf(skill.kind) < 0 && !(isSolo() && skill.kind === 'redirect')) return `「${skill.label}」用不到${ind().boss}身上，换个接收人`;
       tgt = BOSS;
     } else if (target === 'all') {
       if (skill.kind !== 'aoe' && skill.kind !== 'healAll' && skill.kind !== 'revealAll') return '该模板需要指定具体接收人';
@@ -1016,6 +1180,9 @@ function submit(p, skillKey, target, source, raw) {
       const t = byId(target);
       if (!t || !t.alive || t === p || t.spect) return '接收人不可用';
       if (isSolo()) return '演练模式下需求只能提交给甲方';
+      const supportive = ['heal', 'buff'].includes(skill.kind);
+      if (isTeam() && cfg().friendlyFire !== 'on' && allies(p, t) && !supportive) return '当前关闭组内冲突，请选择另一组成员';
+      if (isTeam() && !allies(p, t) && supportive) return '支援只能指向本组成员';
       tgt = t.id;
     }
   }
@@ -1032,6 +1199,8 @@ function tryResolve() {
 }
 
 function resetToLobby() {
+  clearTurn(); room.stage = cfg().startStage; room.stageRound = 0;
+  room.gameVersion++;
   clearTimeout(room.reviewTimer); clearTimeout(room.voteTimer);
   room.reviewTimer = null; room.voteTimer = null;
   room.phase = 'lobby'; room.round = 0; room.revealed = []; room.winner = null; room.winnerReason = '';
@@ -1049,6 +1218,8 @@ function resetToLobby() {
 
 /* ---------------------------------------------------------------- 入 / 离场 */
 function handleJoin(name, wantRole) {
+  // 新成员进入前也清理超时房间，避免接管一局无人继续的单人演练。
+  reapGhosts();
   const clean = String(name || '').trim().slice(0, 12) || '匿名同事';
   // 只有「在线的群主」才算数；群主是幽灵成员时，新进来的人直接接管群主
   const joinAsHost = !room.players.some(x => x.isHost && isLive(x));
@@ -1062,7 +1233,8 @@ function handleJoin(name, wantRole) {
     shield: false, reflect: false, redirectTo: null,
     fragile: 0, noHeal: 0, buffPct: 0, protect: [], disabled: false,
     usedFirstHit: false, ultShield: false, lastGain: 0, stats: { dealt: 0, taken: 0 },
-    spect: !!(room.started && isSolo()),
+    spect: room.started,
+    team: '', projectWork: 0, bot: false,
   };
   if (wantRole && ROLE_BY_KEY[wantRole] && cfg().roleAssign === 'pick' && !usedRoles().includes(wantRole)) p.role = wantRole;
   if (!p.role) assignRole(p);
@@ -1075,20 +1247,35 @@ function handleJoin(name, wantRole) {
 
 function handleLeave(p) {
   if (!p) return;
-  room.players = room.players.filter(x => x.id !== p.id);
-  clients.delete(p.id);
-  delete room.votes[p.id];
-  if (!p.spect) { p.alive = false; pushLog('sys', `@${p.name} 已退出协作空间`); }
+  removePlayers([p], '已退出协作空间');
+}
+
+function removePlayers(gone, reason) {
+  const lostParticipant = gone.some(p => !p.spect && p.alive);
+  room.players = room.players.filter(p => !gone.includes(p));
+  gone.forEach(p => {
+    const client = clients.get(p.id);
+    clients.delete(p.id);
+    if (client) { try { client.end(); } catch (e) {} }
+    delete room.votes[p.id];
+    pushLog('sys', `@${p.name} ${reason}`);
+  });
+  if (room.players.every(p => p.bot)) room.players = [];
   // 房间空了就回到筹备状态，方便下一批同事直接开局
   if (!room.players.length) { resetToLobby(); return; }
-  if (!room.players.some(x => x.isHost)) room.players[0].isHost = true;
-  if (room.phase === 'review' || room.phase === 'select') { checkDeaths(); tryResolve(); }
+  ensureHost();
+  if (lostParticipant && room.started && room.phase !== 'over') {
+    if (isSolo()) { endGame(null, '演练成员已离开，请开启新一轮'); return; }
+    if (isCoop()) { endGame(null, '团队成员已离开，攻坚结束，请开启新一轮'); return; }
+    if (maybeEndAfterDeaths()) return;
+  }
+  if (room.phase === 'select') tryResolve();
   if (room.phase === 'vote' && Object.keys(room.votes).length >= actives().length) resolveVote();
   broadcast();
 }
 
 /* ---------------------------------------------------------------- 指令 */
-const CONFIG_KEYS = ['group', 'industry', 'goal', 'format', 'inputMode', 'roleAssign', 'originMode'];
+const CONFIG_KEYS = ['group', 'industry', 'goal', 'format', 'inputMode', 'roleAssign', 'originMode', 'difficulty', 'stages', 'startStage', 'teamSize', 'turnSeconds', 'friendlyFire'];
 
 function setConfig(p, body) {
   if (!p || !p.isHost) return '只有主持人可以调整房间配置';
@@ -1097,13 +1284,18 @@ function setConfig(p, body) {
   CONFIG_KEYS.forEach(k => { if (body[k] != null) next[k] = String(body[k]).slice(0, 40); });
   if (!IND_BY_KEY[next.industry]) return '未知行业';
   if (!GOAL_BY_KEY[next.goal]) return '未知目标';
-  if (!['pvp', 'coop', 'solo'].includes(next.format)) return '未知赛制';
+  if (!D.FORMATS.some(f => f.key === next.format)) return '未知赛制';
   if (!D.INPUT_MODES.some(x => x.key === next.inputMode)) return '未知出手方式';
   if (!D.ROLE_ASSIGN.some(x => x.key === next.roleAssign)) return '未知职位分配方式';
   if (!D.ORIGIN_MODES.some(x => x.key === next.originMode)) return '未知出身设置';
-  const goalKind = GOAL_BY_KEY[next.goal].kind;
-  if (goalKind === 'boss' && next.format === 'pvp') return '攻坚类目标需要选择团队攻坚或单人演练赛制';
-  if (goalKind !== 'boss' && next.format !== 'pvp') return '该目标只支持多人混战赛制';
+  if (!D.DIFFICULTIES.some(d => d.key === next.difficulty)) return '未知项目难度';
+  for (const [key, low, high] of [['stages', 1, 10], ['startStage', 1, 10], ['teamSize', 1, 5], ['turnSeconds', 0, 300]]) {
+    const number = Number(next[key]);
+    if (!Number.isInteger(number) || number < low || number > high) return `无效的 ${key} 设置`;
+    next[key] = number;
+  }
+  if (next.startStage > next.stages) return '起始关卡不能超过总关数';
+  if (!['on', 'off'].includes(next.friendlyFire)) return '未知组内冲突设置';
 
   const changedIndustry = next.industry !== room.config.industry;
   const changedRoleAssign = next.roleAssign !== room.config.roleAssign;
@@ -1115,7 +1307,7 @@ function setConfig(p, body) {
 
   if (changedRoleAssign) {
     if (next.roleAssign === 'random') room.players.forEach(x => { x.role = null; assignRole(x); });
-    else room.players.forEach(x => { x.role = null; });
+    else room.players.forEach(x => { x.role = x.bot ? pick(D.ROLES).key : null; });
   }
   if (changedOrigin) {
     if (next.originMode === 'off') room.players.forEach(x => { x.origin = null; });
@@ -1144,6 +1336,34 @@ async function apiAct(p, body) {
       return err ? { error: err } : { ok: true };
     }
 
+    case 'addBot':
+    case 'fillSeats': {
+      if (!p.isHost || room.phase !== 'lobby') return { error: '只有主持人可以在筹备时添加虚拟同事' };
+      const desired = cmd === 'addBot' ? room.players.length + 1 : (cfg().format === 'duel' ? 2 : isTeam() ? cfg().teamSize * 2 : isCoop() ? 3 : 4);
+      if (desired > 12) return { error: '协作群最多支持 12 位成员' };
+      while (room.players.length < desired) {
+        const bot = handleJoin(`同事${room.players.length + 1}`);
+        bot.bot = true;
+        if (!bot.role) bot.role = pick(D.ROLES.filter(r => !usedRoles().includes(r.key))).key;
+        if (isTeam()) bot.team = room.players.filter(x => x.team === 'red').length <= room.players.filter(x => x.team === 'blue').length ? 'red' : 'blue';
+      }
+      broadcast(); return { ok: true };
+    }
+
+    case 'setTeam': {
+      if (!p.isHost || room.phase !== 'lobby' || !isTeam()) return { error: '只有主持人可以在筹备时调整分组' };
+      const member = byId(body.playerId);
+      if (!member || !['red', 'blue'].includes(body.team)) return { error: '成员或分组无效' };
+      member.team = body.team; broadcast(); return { ok: true };
+    }
+
+    case 'removeBot': {
+      if (!p.isHost || room.phase !== 'lobby') return { error: '只有主持人可以在筹备时移除虚拟同事' };
+      const member = byId(body.playerId);
+      if (!member || !member.bot) return { error: '只能移除虚拟同事' };
+      handleLeave(member); return { ok: true };
+    }
+
     case 'pickrole': {
       if (!p) return { error: '身份无效' };
       if (room.phase !== 'lobby') return { error: '本季度进行中，无法更换职位' };
@@ -1170,10 +1390,26 @@ async function apiAct(p, body) {
     case 'start': {
       if (!p || !p.isHost) return { error: '只有主持人可以立项' };
       if (room.phase !== 'lobby') return { error: '当前不在筹备阶段' };
-      const need = isSolo() ? 1 : 2;
+      const need = isSolo() ? 1 : isTeam() ? cfg().teamSize * 2 : 2;
       if (room.players.length < need) return { error: `至少需要 ${need} 名成员` };
       const err = startGame();
       return err ? { error: err } : { ok: true };
+    }
+
+    case 'soloStart': {
+      if (!p || !p.isHost) return { error: '只有主持人可以开启单人演练' };
+      if (room.phase !== 'lobby') return { error: '请先返回筹备，再开启单人演练' };
+      if (cfg().roleAssign === 'pick' && !p.role) return { error: '请先认领你的职位' };
+      const configErr = setConfig(p, { format: 'solo' });
+      if (configErr) return { error: configErr };
+      const err = startGame();
+      return err ? { error: err } : { ok: true };
+    }
+
+    case 'backToLobby': {
+      if (!p || !p.isHost) return { error: '只有主持人可以返回筹备' };
+      resetToLobby();
+      return { ok: true };
     }
 
     /* 群主离席时的兜底：在线成员可接管主持权，避免全组都开不了局 */
@@ -1202,6 +1438,7 @@ async function apiAct(p, body) {
       if (p.submitted) return { error: '本轮已提交需求，可先撤回' };
       const text = String(body.text || '').trim().slice(0, 200);
       if (!text) return { error: '还没说你要提什么需求' };
+      const requestRound = room.round, requestVersion = room.gameVersion;
       const skills = skillsFor(p);
       const r = await SEM.interpret(text, {
         skills,
@@ -1210,7 +1447,7 @@ async function apiAct(p, body) {
         bossAllowed: hasBoss(),
         bossName: ind().boss,
       });
-      if (room.phase !== 'select') return { error: '本轮已结算' };
+      if (room.phase !== 'select' || room.round !== requestRound || room.gameVersion !== requestVersion) return { error: '本轮已结算' };
       if (p.submitted) return { error: '本轮已提交需求' };
       if (!r.ok) {
         pushLog('chat', text, p.name);
@@ -1288,6 +1525,12 @@ async function apiAct(p, body) {
   }
 }
 
+return { room, clients, byId, touch, viewFor, handleJoin, handleLeave, apiAct, reapGhosts, defaultConfig, resetToLobby, lanUrls };
+}
+
+const rooms = new Map([['main', createRoom('main')]]);
+function gameForPlayer(id) { return [...rooms.values()].find(game => game.byId(id)) || null; }
+
 /* ---------------------------------------------------------------- HTTP */
 function readBody(req) {
   return new Promise(resolve => {
@@ -1312,45 +1555,73 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === 'GET' && url.pathname === '/sse') {
-    const p = byId(url.searchParams.get('id') || '');
+    const game = gameForPlayer(url.searchParams.get('id') || '');
+    const p = game && game.byId(url.searchParams.get('id'));
     if (!p || p.secret !== url.searchParams.get('secret')) { res.writeHead(403); res.end('身份无效'); return; }
-    touch(p);
+    game.touch(p);
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
     res.write('retry: 2000\n\n');
-    clients.set(p.id, res);
-    res.write(`data: ${JSON.stringify(viewFor(p))}\n\n`);
-    req.on('close', () => { if (clients.get(p.id) === res) clients.delete(p.id); });
+    const oldClient = game.clients.get(p.id);
+    if (oldClient) oldClient.end();
+    game.clients.set(p.id, res);
+    res.write(`data: ${JSON.stringify(game.viewFor(p))}\n\n`);
+    req.on('close', () => { if (game.clients.get(p.id) === res) game.clients.delete(p.id); });
     return;
   }
   if (req.method === 'POST' && url.pathname === '/api/reset') {
     // 仅在设置了 ALLOW_RESET=1 时开放，用于自动化测试清场
     if (process.env.ALLOW_RESET !== '1') { res.writeHead(403); res.end('forbidden'); return; }
-    clearTimeout(room.reviewTimer); clearTimeout(room.voteTimer);
-    room.reviewTimer = null; room.voteTimer = null;
-    clients.clear();
+    const game = rooms.get('main'), room = game.room;
+    game.clients.forEach(client => client.end());
+    game.clients.clear();
     room.players = [];
     room.votes = {};
-    room.config = defaultConfig('internet');
-    resetToLobby();
+    room.config = game.defaultConfig('internet');
+    game.resetToLobby();
     sendJSON(res, { ok: true });
     return;
   }
   if (req.method === 'POST' && url.pathname === '/api/join') {
     const body = await readBody(req);
-    const p = handleJoin(body.name, body.role);
-    sendJSON(res, { ok: true, id: p.id, secret: p.secret, state: viewFor(p) });
+    const game = rooms.get(body.roomId || 'main');
+    if (!game) { sendJSON(res, { error: '协作群不存在，请确认房间编号' }, 404); return; }
+    if (game.room.players.length >= 12) { sendJSON(res, { error: '协作群已满（12 位成员）' }); return; }
+    const p = game.handleJoin(body.name, body.role);
+    sendJSON(res, { ok: true, id: p.id, secret: p.secret, state: game.viewFor(p) });
     return;
+  }
+  if (url.pathname === '/api/rooms' && req.method === 'GET') {
+    const list = [...rooms.entries()].filter(([, game]) => game.room.players.some(p => !p.bot)).map(([id, game]) => ({
+      id, group: game.room.config.group, phase: game.room.phase, count: game.room.players.length,
+      format: game.room.config.format === 'team' ? `小组竞标 · ${game.room.config.teamSize}v${game.room.config.teamSize}` : (D.FORMATS.find(f => f.key === game.room.config.format) || {}).label,
+      goal: (GOAL_BY_KEY[game.room.config.goal] || {}).label,
+    }));
+    sendJSON(res, { ok: true, rooms: list }); return;
+  }
+  if (url.pathname === '/api/rooms' && req.method === 'POST') {
+    const body = await readBody(req);
+    if (!String(body.name || '').trim()) { sendJSON(res, { error: '请先输入花名' }); return; }
+    if (rooms.size >= 100) { sendJSON(res, { error: '当前协作群较多，请稍后再创建' }); return; }
+    const id = crypto.randomBytes(3).toString('hex');
+    const game = createRoom(id), p = game.handleJoin(body.name);
+    if (body.config) {
+      const result = await game.apiAct(p, { ...body.config, cmd: 'config' });
+      if (result.error) { sendJSON(res, result); return; }
+    }
+    rooms.set(id, game);
+    sendJSON(res, { ok: true, id: p.id, secret: p.secret, state: game.viewFor(p) }); return;
   }
   if (req.method === 'POST' && url.pathname === '/api/act') {
     const body = await readBody(req);
-    const p = byId(body.id || '');
+    const game = gameForPlayer(body.id || '');
+    const p = game && game.byId(body.id);
     if (!p || p.secret !== body.secret) { sendJSON(res, { error: '身份无效' }, 403); return; }
-    touch(p);
-    if (body.cmd === 'leave') { handleLeave(p); sendJSON(res, { ok: true }); return; }
-    const r = await apiAct(p, body);
+    game.touch(p);
+    if (body.cmd === 'leave') { game.handleLeave(p); sendJSON(res, { ok: true }); return; }
+    const r = await game.apiAct(p, body);
     if (r.error) { sendJSON(res, r); return; }
     // parse 只是实时预览，不回传 state，避免前端整页重渲染把用户正在输入的草稿冲掉
-    const payload = body.cmd === 'parse' ? { ok: true } : { ok: true, state: viewFor(p) };
+    const payload = body.cmd === 'parse' ? { ok: true } : { ok: true, state: game.viewFor(p) };
     sendJSON(res, Object.assign(payload, r));
     return;
   }
@@ -1358,10 +1629,14 @@ const server = http.createServer(async (req, res) => {
   res.end('not found');
 });
 
-setInterval(() => { clients.forEach(r => { try { r.write(': ping\n\n'); } catch (e) { } }); }, 20000);
+setInterval(() => { rooms.forEach((game, id) => {
+  game.reapGhosts();
+  if (id !== 'main' && !game.room.players.length && Date.now() - game.room.createdAt > 300000) rooms.delete(id);
+}); }, 3000);
+setInterval(() => { rooms.forEach(game => game.clients.forEach(r => { try { r.write(': ping\n\n'); } catch (e) { } })); }, 20000);
 
 server.listen(PORT, '0.0.0.0', () => {
-  const urls = lanUrls();
+  const urls = rooms.get('main').lanUrls();
   console.log(`协作空间服务已启动：http://localhost:${PORT}`);
   urls.forEach(u => console.log(`局域网访问：${u}`));
   if (process.env.LLM_API_KEY) console.log('自由对话模式：已接入大模型解析');

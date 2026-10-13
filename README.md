@@ -49,7 +49,26 @@ Windows 也可双击 start.cmd；若脚本内的 Node 路径不适用，请调�
 3. 主持人立项，玩家通过技能、对话与看板参与当前回合。
 4. 经评审与互评推进游戏，完成目标或触发结算；结束后可重新筹备。
 
-单人也可进入演练模式。房间状态保存在服务进程内存中，服务重启后不会恢复原对局；当前实现围绕单个共享房间运行。
+单人也可直接开启演练。输入花名并留空编号会创建独立协作群；通过邀请地址或房间编号加入同事的群。不同群的成员、配置、消息与对局互相隔离。状态保存在服务进程内存中，服务重启后不会恢复原对局。
+
+## 自由组合协作安排
+
+所有设置有默认值，无需逐项填写。赛制与目标独立选择，例如「3v3 + KPI + 医疗行业 + 混合出手」或「单人 + OKR + 进阶难度」。
+
+| 设置 | 可选项 |
+|---|---|
+| 赛制 | 单人闯关、全员竞逐（大逃杀）、1v1、小组竞标（1v1 至 5v5，默认 3v3）、联合攻坚 |
+| 目标 | 带宽生存、KPI、OKR、固定窗口 deadline、项目需求池 |
+| 工作方式 | 卡牌、关键词、普通对话、混合协作（模板与对话同时可用） |
+| 行业与身份 | 6 个行业、12 种职位及其专属操作，随机职位或自行认领；出身可启用或关闭 |
+| 单人项目 | 轻松、标准、进阶、挑战四档难度；1 至 10 关，可选择起始关卡 |
+| 回合窗口 | 不限时、30 秒、60 秒、120 秒；超时自动防守 |
+
+人数不足时，主持人可添加虚拟同事或点击「补齐成员」。虚拟同事自动提交；组队模式默认禁止组内攻击，恢复与赋能可支援本组。KPI 与 OKR 按团队累计，deadline 在固定窗口结束时结算，共享需求池按小组交付贡献评定。单人 KPI／OKR 每关达到 100；单人 deadline 每关 10 轮、至少交付 60；需求池目标逐关交付并恢复带宽与冷却。
+
+虚拟同事使用本地策略。普通对话默认使用本地语义解析；配置 LLM_API_KEY 后可接入大模型，失败时回退本地规则。群聊、企业工作台、看板、会议四种视图均保留工作软件外观，Ctrl+B 可切换周报。
+
+独立验证新功能可运行 `node modes-check.js` 和 `node recovery-check.js`；脚本各自启动隔离服务，不清空正式房间。
 
 ## 配置
 
@@ -92,14 +111,14 @@ node server.js
 ### 新手第一局：单人演练
 
 1. 输入昵称并进入协作空间，第一位玩家成为主持人。
-2. 将「本季度目标」设为「项目攻坚」，再将「赛制」设为「单人演练」。建议先使用「卡牌模式」与随机职位。
-3. 点击「立项，开始本季度」。查看右侧需求池、自己的状态与当前轮次。
+2. 点击「直接开始单人演练」即可用默认项目开局；也可先选择个人演练、目标、难度与关卡，再选择「创建并立项」。
+3. 查看右侧需求池、自己的状态与当前轮次；需要调整时可由主持人返回筹备。
 4. 在底部选择可用需求模板；需要目标的操作选择接收人，再点击「提交评审」。单人演练的需求目标按规则指向甲方。
 5. 阅读站会、评审和互评日志，按剩余带宽与需求池调整策略；单人目标是连续通过三个项目关。
 
 ### 多人如何开始
 
-同事通过主持人电脑的局域网地址加入同一服务。选择多人目标或团队攻坚，等待所需成员加入后立项。团队攻坚需要合作清空需求池，任一成员出局会导致团队失败；多人混战则按所选目标结算。
+同事通过主持人电脑的局域网邀请地址（包含 `?room=编号`）或输入房间编号加入同一协作群。选择协作安排与目标，邀请所需成员或用虚拟同事补位后立项。联合攻坚共享目标；小组竞标按整组进度评定；全员竞逐按个人目标结算。
 
 ### 不同目标的胜负条件
 
@@ -121,8 +140,6 @@ node server.js
 截图是使用演示昵称的单人模式。服务重启会清空内存对局。
 
 ---
-
-# English Guide
 
 ## Features
 
@@ -154,7 +171,17 @@ On Windows, start.cmd is also available. Adjust its Node executable paths if the
 3. The host starts the project; players use skills, chat and boards during each round.
 4. Reviews and peer voting advance the game until an objective or end condition is reached; a new session can then be prepared.
 
-Solo practice is supported. Room state lives in process memory and is lost when the server restarts. The current implementation runs a single shared room.
+Entering a nickname with an empty room code creates an independent room. Share its invitation URL or code to invite colleagues. Members, configuration, chat and gameplay are isolated between rooms. State lives in process memory and is lost when the server restarts.
+
+## Mix and match
+
+Choose a format and objective independently; all other settings have defaults. Formats include solo campaigns, free-for-all survival, 1v1, teams from 1v1 to 5v5 (default 3v3), and cooperative projects. Objectives include survival, KPI, OKR, a fixed deadline window, and clearing project requirements. Team KPI/OKR use cumulative progress; project competitions compare delivery contributions.
+
+Solo campaigns have four difficulty levels, 1–10 stages and a selectable starting stage. KPI/OKR require 100 progress per stage; deadline stages last 10 rounds and require 60 delivered. Choose cards, keywords, natural language or hybrid input. Natural language uses local parsing by default, with optional server-configured LLM support and local fallback.
+
+Hosts can add virtual colleagues or fill empty seats. Bots act automatically. Teams disable friendly attacks by default and allow support for allies. Optional submission windows of 30, 60 or 120 seconds automatically defend missing submissions. Chat, enterprise workspace, board and meeting views keep a workplace appearance.
+
+Run `node modes-check.js` and `node recovery-check.js` to test independent rooms, formats and recovery on isolated servers.
 
 ## Configuration
 
