@@ -25,7 +25,7 @@ node server.js
 
 Open http://localhost:7777. Other players join the same service. For LAN play, use the host computer's actual address, such as http://192.168.1.10:7777, and allow the needed port through its firewall.
 
-On Windows, start.cmd is also available. Adjust its Node executable paths if they do not match your machine, or run node server.js directly.
+On Windows, double-click `start.cmd`. The launcher detects Node, avoids occupied legacy ports or reuses a current service, and opens the browser after readiness. Use the printed port and keep the server window open. Open pages through HTTP rather than directly as HTML files.
 
 ## Playing
 
@@ -46,11 +46,22 @@ Hosts can add virtual colleagues or fill empty seats. Bots act automatically. Te
 
 Run `node modes-check.js` and `node recovery-check.js` to test independent rooms, formats and recovery on isolated servers.
 
+## Themes and LAN browsers
+
+Choose System, Light, Dark or Eye Comfort on the login page or toolbar. The preference is remembered independently of chat, enterprise workspace, board and meeting views. Narrow screens have compact controls and stacked board/meeting sections.
+
+Use **Invite colleagues** to choose the host computer's Wi-Fi/Ethernet address and copy the complete room URL. Colleagues open it on the same LAN from a phone or desktop browser. Invitation copying includes a fallback for LAN HTTP pages. Multiple tabs can share the same player's live connection; reconnection status is visible and typing is preserved during state updates.
+
+If another device cannot connect, run `./enable-lan.ps1 -Port 7778` from an administrator PowerShell in the project directory, replacing the port with the actual one. The optional rule allows only the current Node program, chosen TCP port, LAN adapter and local subnet on Private/Public profiles. `-Disable` disables the rule created by this project. Administrator permission is required to modify Windows Firewall.
+
+`GET /api/network` reports the actual port, bind address and LAN adapters. `HOST` defaults to `0.0.0.0`; use `127.0.0.1` to restrict access to this computer. LAN sharing does not publish the app to the public Internet.
+
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
 | PORT | 7777 | HTTP port |
+| HOST | 0.0.0.0 | Bind address; 127.0.0.1 restricts access to this computer |
 | REVIEW_MS | 4500 | Review phase duration in milliseconds |
 | VOTE_MS | 9000 | Peer-voting duration in milliseconds |
 | LIVE_MS | 40000 | Member liveness window in milliseconds |

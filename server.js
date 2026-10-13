@@ -7,12 +7,13 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const crypto = require('crypto');
 const D = require('./game-data');
 const SEM = require('./semantic');
+const { networkInfo } = require('./network');
 
 const PORT = Number(process.env.PORT) || 7777;
+const HOST = process.env.HOST || '0.0.0.0';
 const REVIEW_MS = Number(process.env.REVIEW_MS) || 4500;
 const VOTE_MS = Number(process.env.VOTE_MS) || 9000;
 const START_BW = 100;
@@ -271,11 +272,7 @@ function tierOf(p) {
 const TIER_TEXT = { ok: '带宽充裕', warn: '高负荷', danger: '濒临满负荷', out: '已优化', spect: '观察期' };
 
 function lanUrls() {
-  const out = [];
-  const ifs = os.networkInterfaces();
-  for (const name in ifs) for (const i of ifs[name]) if (i.family === 'IPv4' && !i.internal) out.push(`http://${i.address}:${PORT}`);
-  const rank = u => u.includes('192.168.') ? 0 : (u.includes('//10.') ? 1 : (u.includes('172.') ? 2 : 3));
-  return out.sort((a, b) => rank(a) - rank(b));
+  return networkInfo(PORT, HOST).addresses.filter(entry => entry.kind === 'lan').map(entry => entry.url);
 }
 
 function skillMeta(s) {
@@ -371,6 +368,7 @@ function viewFor(viewer) {
     revealed: room.revealed,
     log: room.log.slice(-140),
     urls: lanUrls(),
+    network: networkInfo(PORT, HOST),
     winner: room.winner ? { name: room.winner.name, team: !!room.winner.team, reason: room.winnerReason } : null,
     reason: room.phase === 'over' ? room.winnerReason : '',
     okr: okrInfo(),
@@ -408,9 +406,14 @@ function reapGhosts() {
 }
 
 function broadcast() {
-  clients.forEach((res, pid) => {
+  clients.forEach((responses, pid) => {
     const viewer = byId(pid);
-    try { res.write(`data: ${JSON.stringify(viewFor(viewer))}\n\n`); } catch (e) { clients.delete(pid); }
+    const data = `data: ${JSON.stringify(viewFor(viewer))}\n\n`;
+    responses.forEach(res => {
+      if (res.destroyed) { responses.delete(res); return; }
+      try { res.write(data); } catch (e) { responses.delete(res); }
+    });
+    if (!responses.size) clients.delete(pid);
   });
 }
 
@@ -1256,7 +1259,7 @@ function removePlayers(gone, reason) {
   gone.forEach(p => {
     const client = clients.get(p.id);
     clients.delete(p.id);
-    if (client) { try { client.end(); } catch (e) {} }
+    if (client) client.forEach(res => { try { res.end(); } catch (e) {} });
     delete room.votes[p.id];
     pushLog('sys', `@${p.name} ${reason}`);
   });
@@ -1533,23 +1536,42 @@ function gameForPlayer(id) { return [...rooms.values()].find(game => game.byId(i
 
 /* ---------------------------------------------------------------- HTTP */
 function readBody(req) {
-  return new Promise(resolve => {
-    let raw = '';
-    req.on('data', c => { raw += c; if (raw.length > 1e6) req.destroy(); });
-    req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch (e) { resolve({}); } });
+  return new Promise((resolve, reject) => {
+    let chunks = [], size = 0, tooLarge = false;
+    const invalid = (message, statusCode) => Object.assign(new Error(message), { statusCode });
+    req.on('data', chunk => {
+      if (tooLarge) return;
+      size += chunk.length;
+      if (size > 1000000) { tooLarge = true; chunks = []; reject(invalid('请求内容过大', 413)); return; }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (tooLarge) return;
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error();
+        resolve(body);
+      } catch (e) { reject(invalid('请求需要有效的 JSON 对象', 400)); }
+    });
+    req.on('error', () => reject(invalid('请求连接已中断', 400)));
+    req.on('aborted', () => reject(invalid('请求连接已中断', 400)));
   });
 }
 function sendJSON(res, obj, code) {
-  res.writeHead(code || 200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(code || 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(obj));
 }
 
 const server = http.createServer(async (req, res) => {
+  try {
   const url = new URL(req.url, 'http://localhost');
+  if (req.method === 'GET' && url.pathname === '/api/network') {
+    sendJSON(res, { ok: true, ...networkInfo(PORT, HOST) }); return;
+  }
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
     fs.readFile(path.join(__dirname, 'public', 'index.html'), (err, buf) => {
       if (err) { res.writeHead(500); res.end('index.html 缺失'); return; }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(buf);
     });
     return;
@@ -1559,20 +1581,20 @@ const server = http.createServer(async (req, res) => {
     const p = game && game.byId(url.searchParams.get('id'));
     if (!p || p.secret !== url.searchParams.get('secret')) { res.writeHead(403); res.end('身份无效'); return; }
     game.touch(p);
-    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     res.write('retry: 2000\n\n');
-    const oldClient = game.clients.get(p.id);
-    if (oldClient) oldClient.end();
-    game.clients.set(p.id, res);
+    const responses = game.clients.get(p.id) || new Set();
+    responses.add(res);
+    game.clients.set(p.id, responses);
     res.write(`data: ${JSON.stringify(game.viewFor(p))}\n\n`);
-    req.on('close', () => { if (game.clients.get(p.id) === res) game.clients.delete(p.id); });
+    req.on('close', () => { responses.delete(res); if (!responses.size && game.clients.get(p.id) === responses) game.clients.delete(p.id); });
     return;
   }
   if (req.method === 'POST' && url.pathname === '/api/reset') {
     // 仅在设置了 ALLOW_RESET=1 时开放，用于自动化测试清场
     if (process.env.ALLOW_RESET !== '1') { res.writeHead(403); res.end('forbidden'); return; }
     const game = rooms.get('main'), room = game.room;
-    game.clients.forEach(client => client.end());
+    game.clients.forEach(responses => responses.forEach(client => client.end()));
     game.clients.clear();
     room.players = [];
     room.votes = {};
@@ -1583,8 +1605,10 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url.pathname === '/api/join') {
     const body = await readBody(req);
-    const game = rooms.get(body.roomId || 'main');
+    const game = rooms.get(String(body.roomId || 'main').trim().toLowerCase());
     if (!game) { sendJSON(res, { error: '协作群不存在，请确认房间编号' }, 404); return; }
+    if (!String(body.name || '').trim()) { sendJSON(res, { error: '请先输入花名' }, 400); return; }
+    game.reapGhosts();
     if (game.room.players.length >= 12) { sendJSON(res, { error: '协作群已满（12 位成员）' }); return; }
     const p = game.handleJoin(body.name, body.role);
     sendJSON(res, { ok: true, id: p.id, secret: p.secret, state: game.viewFor(p) });
@@ -1625,17 +1649,26 @@ const server = http.createServer(async (req, res) => {
     sendJSON(res, Object.assign(payload, r));
     return;
   }
-  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('not found');
+  sendJSON(res, { error: '访问地址不存在，请刷新页面或检查服务版本' }, 404);
+  } catch (error) {
+    if (res.destroyed) return;
+    if (!res.headersSent) sendJSON(res, { error: error.statusCode ? error.message : '服务暂时异常，请稍后重试' }, error.statusCode || 500);
+    else res.end();
+    if (!error.statusCode) console.error('请求处理异常:', error.message);
+  }
 });
 
 setInterval(() => { rooms.forEach((game, id) => {
   game.reapGhosts();
   if (id !== 'main' && !game.room.players.length && Date.now() - game.room.createdAt > 300000) rooms.delete(id);
 }); }, 3000);
-setInterval(() => { rooms.forEach(game => game.clients.forEach(r => { try { r.write(': ping\n\n'); } catch (e) { } })); }, 20000);
+setInterval(() => { rooms.forEach(game => game.clients.forEach(responses => responses.forEach(r => { try { r.write(': ping\n\n'); } catch (e) { } }))); }, 20000);
 
-server.listen(PORT, '0.0.0.0', () => {
+server.on('error', error => {
+  console.error(error.code === 'EADDRINUSE' ? `端口 ${PORT} 已被占用，请使用 start.cmd 自动选择可用端口，或设置 PORT。` : `服务启动失败：${error.message}`);
+  process.exit(1);
+});
+server.listen(PORT, HOST, () => {
   const urls = rooms.get('main').lanUrls();
   console.log(`协作空间服务已启动：http://localhost:${PORT}`);
   urls.forEach(u => console.log(`局域网访问：${u}`));

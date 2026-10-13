@@ -40,7 +40,26 @@ node server.js
 
 打开 http://localhost:7777。其他玩家通过同一服务加入；局域网访问使用服务电脑的 IP，例如 http://192.168.1.10:7777（替换成实际地址，并允许所需端口通过防火墙）。
 
-Windows 也可双击 start.cmd；若脚本内的 Node 路径不适用，请调整或直接运行 node server.js。
+Windows 推荐双击 `start.cmd`。启动器会查找 Node、避开被旧服务占用的端口，或复用已经运行的新版服务，并在服务就绪后打开浏览器。以窗口输出的地址为准，服务窗口保持开启。网页通过 HTTP 服务访问，不能直接双击 `public/index.html`。
+
+## 显示主题与局域网网页
+
+登录页和右上角均可选择「跟随系统／浅色／深色／护眼」；主题独立于群聊、企业工作台、看板、会议视图，并在本浏览器记住选择。窄屏网页会调整控制区、看板与会议布局。
+
+1. 主持人在电脑上启动服务，进入自己的协作群。
+2. 点击「邀请同事」，选择同事所连 Wi-Fi 或有线网络对应的地址。页面优先显示真实局域网网卡，邀请带上 `?room=编号`；`localhost` 选项只用于本机。
+3. 将完整邀请地址发给同事，同事在同一局域网的手机或电脑浏览器打开并输入花名。
+4. 若其他设备打不开，在主持人电脑的**管理员 PowerShell**、项目目录中执行（端口使用实际启动端口）：
+
+```powershell
+.\enable-lan.ps1 -Port 7778
+```
+
+这个可选脚本只允许当前 Node 程序、指定 TCP 端口、指定局域网网卡上的本地子网入站连接，适用于 Windows 专用或公用网络。可用 `-InterfaceAlias "WLAN"` 指定另一张真实局域网网卡；使用 `-Disable` 可关闭本项目创建的规则。修改防火墙需要 Windows 管理员权限。
+
+网页在局域网 HTTP 环境下也支持复制邀请；浏览器禁用自动复制时，地址会选中以便手动复制。实时连接支持同一玩家打开多个标签页；断线显示重连状态，服务重启导致身份失效时回到登录页。群消息刷新不会打断当前输入。
+
+`/api/network` 提供当前端口、监听地址和网卡信息；`HOST` 默认 `0.0.0.0`，允许局域网访问。设置为 `127.0.0.1` 时只允许本机访问。局域网邀请不是公网发布；跨网络访问需要另外部署服务。
 
 ## 游戏流程
 
@@ -75,6 +94,7 @@ Windows 也可双击 start.cmd；若脚本内的 Node 路径不适用，请调�
 | 环境变量 | 默认值 | 用途 |
 |---|---|---|
 | PORT | 7777 | 服务端口 |
+| HOST | 0.0.0.0 | 监听网卡；127.0.0.1 只允许本机 |
 | REVIEW_MS | 4500 | 评审阶段时长（毫秒） |
 | VOTE_MS | 9000 | 互评阶段时长（毫秒） |
 | LIVE_MS | 40000 | 成员存活判定窗口（毫秒） |
@@ -100,6 +120,8 @@ node server.js
 | semantic.js | 本地语义与可选 LLM 解析 |
 | public/index.html | 网页界面与交互 |
 | start.cmd | Windows 启动入口 |
+| start.ps1、enable-lan.ps1 | 端口检测启动器、可选局域网防火墙配置 |
+| network.js、web-check.js | 网卡识别、局域网与实时连接检查 |
 | test.js、dom-check.js、ghost-check.js、repro.js | 开发检查与复现脚本 |
 
 检查脚本可能依赖浏览器工具、特定端口或测试重置设置，运行前请阅读脚本。当前网页界面为中文；文档提供中英文版本。项目没有持久化数据库，GitHub 保存代码而不是运行中的对局。
@@ -162,7 +184,7 @@ node server.js
 
 Open http://localhost:7777. Other players join the same service. For LAN play, use the host computer's actual address, such as http://192.168.1.10:7777, and allow the needed port through its firewall.
 
-On Windows, start.cmd is also available. Adjust its Node executable paths if they do not match your machine, or run node server.js directly.
+On Windows, double-click `start.cmd`. The launcher detects Node, avoids occupied legacy ports or reuses a current service, and opens the browser after readiness. Use the printed port and keep the server window open. Open pages through HTTP rather than directly as HTML files.
 
 ## Playing
 
@@ -183,11 +205,22 @@ Hosts can add virtual colleagues or fill empty seats. Bots act automatically. Te
 
 Run `node modes-check.js` and `node recovery-check.js` to test independent rooms, formats and recovery on isolated servers.
 
+## Themes and LAN browsers
+
+Choose System, Light, Dark or Eye Comfort on the login page or toolbar. The preference is remembered independently of chat, enterprise workspace, board and meeting views. Narrow screens have compact controls and stacked board/meeting sections.
+
+Use **Invite colleagues** to choose the host computer's Wi-Fi/Ethernet address and copy the complete room URL. Colleagues open it on the same LAN from a phone or desktop browser. Invitation copying includes a fallback for LAN HTTP pages. Multiple tabs can share the same player's live connection; reconnection status is visible and typing is preserved during state updates.
+
+If another device cannot connect, run `./enable-lan.ps1 -Port 7778` from an administrator PowerShell in the project directory, replacing the port with the actual one. The optional rule allows only the current Node program, chosen TCP port, LAN adapter and local subnet on Private/Public profiles. `-Disable` disables the rule created by this project. Administrator permission is required to modify Windows Firewall.
+
+`GET /api/network` reports the actual port, bind address and LAN adapters. `HOST` defaults to `0.0.0.0`; use `127.0.0.1` to restrict access to this computer. LAN sharing does not publish the app to the public Internet.
+
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
 | PORT | 7777 | HTTP port |
+| HOST | 0.0.0.0 | Bind address; 127.0.0.1 restricts access to this computer |
 | REVIEW_MS | 4500 | Review phase duration in milliseconds |
 | VOTE_MS | 9000 | Peer-voting duration in milliseconds |
 | LIVE_MS | 40000 | Member liveness window in milliseconds |
